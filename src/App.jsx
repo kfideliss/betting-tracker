@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, ScatterChart, Scatter, ZAxis, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, ScatterChart, Scatter, ZAxis, Legend, ComposedChart, Area } from "recharts";
 import { lsGet, lsSet, exportAllData, importAllData } from "./storage";
 import { useAuth, LoginScreen } from "./auth";
 
@@ -56,10 +56,10 @@ function settleDate(b){ return b.settledDate||b.date; }
 
 function StatCard({label,value,sub,color}){
   return(
-    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px"}}>
-      <div style={{color:C.muted,fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>{label}</div>
-      <div style={{color:color||C.text,fontSize:20,fontWeight:700,fontFamily:"monospace"}}>{value}</div>
-      {sub&&<div style={{color:C.muted,fontSize:10,marginTop:2}}>{sub}</div>}
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${color||C.border}`,borderRadius:10,padding:"14px 18px",marginBottom:2}}>
+      <div style={{color:C.muted,fontSize:10,letterSpacing:"0.12em",fontWeight:600,textTransform:"uppercase",marginBottom:5}}>{label}</div>
+      <div style={{color:color||C.text,fontSize:22,fontWeight:800,fontFamily:"monospace"}}>{value}</div>
+      {sub&&<div style={{color:C.muted,fontSize:10,marginTop:3}}>{sub}</div>}
     </div>
   );
 }
@@ -428,7 +428,7 @@ export default function App(){
 
       <div style={{borderBottom:`1px solid ${C.border}`,padding:isMobile?"12px 14px":"16px 24px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
-          <span style={{fontWeight:800,fontSize:18,letterSpacing:"-0.02em"}}>EDGE</span>
+          <span style={{fontWeight:800,fontSize:18,letterSpacing:"-0.02em",background:"linear-gradient(135deg, #1e6fff, #a78bfa)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>EDGE</span>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {[["dashboard","Home"],["log","Bets"],["calendar","Calendar"],["accounts","Settings"],["analysis","Analysis"]].map(([k,label])=>(
               <button key={k} onClick={()=>setTab(k)} style={{background:tab===k?C.accent:"transparent",color:tab===k?"#fff":C.muted,border:`1px solid ${tab===k?C.accent:C.border}`,borderRadius:6,padding:isMobile?"7px 10px":"6px 13px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
@@ -493,56 +493,75 @@ export default function App(){
             </div>
 
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
-              <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>Bankroll History — {timeFilter}</div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>Bankroll History</div>
+                <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
+              </div>
               {bankrollSeries.points.length>1?(
                 <ResponsiveContainer width="100%" height={210}>
-                  <LineChart data={bankrollSeries.points}>
+                  <ComposedChart data={bankrollSeries.points}>
+                    <defs>
+                      <linearGradient id="combinedGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={C.combined} stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor={C.combined} stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
                     <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={50}/>
-                    <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
+                    <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
+                    <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
                     <Legend wrapperStyle={{fontSize:11}}/>
-                    <Line type="monotone" dataKey="Combined" stroke={C.combined} strokeWidth={2.5} dot={false}/>
-                    {books.map(bk=>(<Line key={bk.name} type="monotone" dataKey={bk.name} stroke={bk.color} strokeWidth={1.5} dot={false}/>))}
-                  </LineChart>
+                    <Area type="monotone" dataKey="Combined" stroke={C.combined} strokeWidth={3} fill="url(#combinedGrad)" dot={false}/>
+                    {books.map(bk=>(<Line key={bk.name} type="monotone" dataKey={bk.name} stroke={bk.color} strokeWidth={1.5} strokeDasharray="4 2" dot={false}/>))}
+                  </ComposedChart>
                 </ResponsiveContainer>
               ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Settle bets or log transactions to see your curve.</div>}
               {bankrollSeries.txnMarkers.length>0&&(
-                <div style={{color:C.muted,fontSize:10,marginTop:6}}>
-                  {bankrollSeries.txnMarkers.map((m,i)=><span key={i} style={{marginRight:10}}>{m.kind==="deposit"?"▲":"▼"} {m.date} {m.kind}</span>)}
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:8}}>
+                  {bankrollSeries.txnMarkers.map((m,i)=><span key={i} style={{color:m.kind==="deposit"?C.win:C.loss,fontSize:11}}>{m.kind==="deposit"?"▲":"▼"} {m.date}</span>)}
                 </div>
               )}
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>
-              {marketBreakdown.length>0&&(
+              {marketBreakdown.length>0&&(()=>{const maxAbs=Math.max(...marketBreakdown.map(m=>Math.abs(m.pl)),1);return(
                 <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px"}}>
                   <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>By Market</div>
                   {marketBreakdown.map(m=>(
-                    <div key={m.market} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
-                      <div style={{fontSize:13,fontWeight:600}}>{m.market} <span style={{color:C.muted,fontSize:10}}>({m.count})</span></div>
-                      <div style={{display:"flex",gap:14,fontFamily:"monospace",fontSize:12}}>
-                        <span style={{color:m.roi>=0?C.win:C.loss}}>{m.roi.toFixed(0)}% ROI</span>
-                        <span style={{color:m.pl>=0?C.win:C.loss}}>{fmt(m.pl)}</span>
+                    <div key={m.market} style={{borderTop:`1px solid ${C.border}`,paddingTop:8,paddingBottom:4}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                        <div style={{fontSize:13,fontWeight:600}}>{m.market} <span style={{color:C.muted,fontSize:10}}>({m.count})</span></div>
+                        <div style={{display:"flex",gap:14,fontFamily:"monospace",fontSize:12}}>
+                          <span style={{color:m.roi>=0?C.win:C.loss}}>{m.roi.toFixed(0)}% ROI</span>
+                          <span style={{color:m.pl>=0?C.win:C.loss}}>{fmt(m.pl)}</span>
+                        </div>
+                      </div>
+                      <div style={{height:3,borderRadius:2,background:C.border,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${(Math.abs(m.pl)/maxAbs)*100}%`,background:m.pl>=0?C.win:C.loss,borderRadius:2}}/>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-              {sportBreakdown.length>0&&(
+              );})()}
+              {sportBreakdown.length>0&&(()=>{const maxAbs=Math.max(...sportBreakdown.map(s=>Math.abs(s.pl)),1);return(
                 <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px"}}>
                   <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>By Sport</div>
                   {sportBreakdown.map(s=>(
-                    <div key={s.sport} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
-                      <div style={{fontSize:13,fontWeight:600}}>{s.sport} <span style={{color:C.muted,fontSize:10}}>({s.count})</span></div>
-                      <div style={{display:"flex",gap:14,fontFamily:"monospace",fontSize:12}}>
-                        <span style={{color:C.muted}}>{s.strike.toFixed(0)}% SR</span>
-                        <span style={{color:s.roi>=0?C.win:C.loss}}>{s.roi.toFixed(0)}% ROI</span>
-                        <span style={{color:s.pl>=0?C.win:C.loss}}>{fmt(s.pl)}</span>
+                    <div key={s.sport} style={{borderTop:`1px solid ${C.border}`,paddingTop:8,paddingBottom:4}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                        <div style={{fontSize:13,fontWeight:600}}>{s.sport} <span style={{color:C.muted,fontSize:10}}>({s.count})</span></div>
+                        <div style={{display:"flex",gap:14,fontFamily:"monospace",fontSize:12}}>
+                          <span style={{color:C.muted}}>{s.strike.toFixed(0)}% SR</span>
+                          <span style={{color:s.roi>=0?C.win:C.loss}}>{s.roi.toFixed(0)}% ROI</span>
+                          <span style={{color:s.pl>=0?C.win:C.loss}}>{fmt(s.pl)}</span>
+                        </div>
+                      </div>
+                      <div style={{height:3,borderRadius:2,background:C.border,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${(Math.abs(s.pl)/maxAbs)*100}%`,background:s.pl>=0?C.win:C.loss,borderRadius:2}}/>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
+              );})()}
             </div>
           </div>
         )}
@@ -825,13 +844,13 @@ export default function App(){
             <div style={{fontSize:16,fontWeight:700,marginBottom:16}}>Performance Analysis</div>
             <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:20}}>
               {bookStats.map(bs=>(
-                <div key={bs.name} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px"}}>
+                <div key={bs.name} style={{background:C.card,border:`1px solid ${C.border}`,borderTop:`3px solid ${bs.color}`,borderRadius:10,padding:"14px 18px"}}>
                   <div style={{color:bs.color,fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>{bs.name}</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <div><div style={{color:C.muted,fontSize:10}}>Balance</div><div style={{fontFamily:"monospace",fontSize:15,fontWeight:700}}>${bs.balance.toFixed(2)}</div></div>
-                    <div><div style={{color:C.muted,fontSize:10}}>P&L</div><div style={{fontFamily:"monospace",fontSize:15,fontWeight:700,color:bs.pl>=0?C.win:C.loss}}>{fmt(bs.pl)}</div></div>
-                    <div><div style={{color:C.muted,fontSize:10}}>ROI</div><div style={{fontFamily:"monospace",fontSize:13,color:bs.roi>=0?C.win:C.loss}}>{bs.roi.toFixed(1)}%</div></div>
-                    <div><div style={{color:C.muted,fontSize:10}}>Settled</div><div style={{fontFamily:"monospace",fontSize:13}}>{bs.count}</div></div>
+                    <div><div style={{color:C.muted,fontSize:10,marginBottom:2}}>Balance</div><div style={{fontFamily:"monospace",fontSize:16,fontWeight:800}}>${bs.balance.toFixed(2)}</div></div>
+                    <div><div style={{color:C.muted,fontSize:10,marginBottom:2}}>P&L</div><div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:bs.pl>=0?C.win:C.loss}}>{fmt(bs.pl)}</div></div>
+                    <div><div style={{color:C.muted,fontSize:10,marginBottom:2}}>ROI</div><div style={{fontFamily:"monospace",fontSize:13,color:bs.roi>=0?C.win:C.loss}}>{bs.roi.toFixed(1)}%</div></div>
+                    <div><div style={{color:C.muted,fontSize:10,marginBottom:2}}>Settled</div><div style={{fontFamily:"monospace",fontSize:13}}>{bs.count}</div></div>
                   </div>
                 </div>
               ))}
