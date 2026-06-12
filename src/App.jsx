@@ -273,7 +273,9 @@ export default function App(){
 
   const marketBreakdown=MARKETS.map(m=>{
     const mb=settled.filter(b=>b.market===m);
-    return{market:m==="Same Game Multi"?"SGM":m==="Head-to-Head"?"H2H":m.split("/")[0].split(" ")[0],pl:parseFloat(mb.reduce((a,b)=>a+betPL(b),0).toFixed(2)),count:mb.length};
+    const pl=parseFloat(mb.reduce((a,b)=>a+betPL(b),0).toFixed(2));
+    const cost=mb.reduce((a,b)=>a+betCost(b),0);
+    return{market:m==="Same Game Multi"?"SGM":m==="Head-to-Head"?"H2H":m.split("/")[0].split(" ")[0],pl,roi:cost>0?(pl/cost)*100:0,count:mb.length};
   }).filter(m=>m.count>0);
 
   const sportBreakdown=SPORTS.map(s=>{
@@ -557,16 +559,16 @@ export default function App(){
             <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>
               {marketBreakdown.length>0&&(
                 <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px"}}>
-                  <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>P&L by Market</div>
-                  <ResponsiveContainer width="100%" height={150}>
-                    <BarChart data={marketBreakdown}>
-                      <XAxis dataKey="market" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
-                      <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} width={45}/>
-                      <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12}} formatter={(v)=>[`$${v.toFixed(2)}`,"P&L"]}/>
-                      <ReferenceLine y={0} stroke={C.border}/>
-                      <Bar dataKey="pl" radius={[4,4,0,0]} fill={C.accent}/>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>By Market</div>
+                  {marketBreakdown.map(m=>(
+                    <div key={m.market} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:13,fontWeight:600}}>{m.market} <span style={{color:C.muted,fontSize:10}}>({m.count})</span></div>
+                      <div style={{display:"flex",gap:14,fontFamily:"monospace",fontSize:12}}>
+                        <span style={{color:m.roi>=0?C.win:C.loss}}>{m.roi.toFixed(0)}% ROI</span>
+                        <span style={{color:m.pl>=0?C.win:C.loss}}>{fmt(m.pl)}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               {sportBreakdown.length>0&&(
