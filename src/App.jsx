@@ -53,35 +53,6 @@ function inTimeFilter(dateStr,filter){
 }
 function settleDate(b){ return b.settledDate||b.date; }
 
-const IMPORT_BETS=[
-  {match:"Spain or Argentina — Winner Double Chance",odds:3.40,stake:25,isBonus:true},
-  {match:"Spain — Winner",odds:5.50,stake:10,isBonus:true},
-  {match:"Argentina or France — Winner Double Chance",odds:3.60,stake:25},
-  {match:"France/Kylian Mbappe — Winner/Golden Ball Double",odds:26.00,stake:5},
-  {match:"Spain/Rodri — Winner/Golden Ball Double",odds:51.00,stake:5},
-  {match:"England/Declan Rice — Winner/Golden Ball Double",odds:67.00,stake:5},
-  {match:"Brazil/Raphinha — Winner/Golden Ball Double",odds:67.00,stake:5},
-  {match:"Spain/Mikel Oyarzabal — Winner/Top Goalscorer Double",odds:26.00,stake:5},
-  {match:"Argentina/Julian Alvarez — Winner/Top Goalscorer Double",odds:101.00,stake:10},
-  {match:"France/Senegal — Group Quinella (Group I)",odds:3.25,stake:25},
-  {match:"Switzerland/Bosnia — Group Quinella (Group B)",odds:3.75,stake:25},
-  {match:"Turkiye/Australia — Group Quinella (Group D)",odds:11.00,stake:10},
-  {match:"Morocco — Group Winner (Group C)",odds:4.50,stake:25},
-  {match:"Paraguay — Finish Bottom of Group (Group D)",odds:4.25,stake:25},
-  {match:"Canada — Finish Bottom of Group (Group B)",odds:9.00,stake:15},
-  {match:"Sweden — Finish Bottom of Group (Group F)",odds:4.00,stake:25},
-  {match:"Quadcast Group A: 1.CZE/2.KOR/3.MEX/4.RSA",odds:26.00,stake:5},
-  {match:"Quadcast Group A: 1.KOR/2.CZE/3.MEX/4.RSA",odds:21.00,stake:5},
-  {match:"Quadcast Group B: 1.SUI/2.BIH/3.QAT/4.CAN",odds:21.00,stake:5},
-  {match:"Multi 2-Leg: ARG Reach QF (1.95) + ESP Reach QF (1.60)",odds:3.12,stake:25,betType:"Multi"},
-  {match:"Multi 4-Leg: NZL (1.45) + JOR (1.20) + IRQ (1.20) + PAN (1.55) Finish Bottom",odds:3.23,stake:25,betType:"Multi"},
-].map((b,i)=>({
-  id:`import-${i}`,date:"2026-06-10",sport:"Soccer",
-  market:b.betType==="Multi"?"Same Game Multi":"Futures Market",
-  bookmaker:"TAB",match:b.match,stake:b.stake,odds:b.odds,myProb:null,
-  outcome:"Pending",notes:"Imported from TAB screenshots",
-  betType:b.betType||"Future",isBonus:!!b.isBonus,deducted:!b.isBonus,
-}));
 
 function StatCard({label,value,sub,color}){
   return(
@@ -118,7 +89,6 @@ export default function App(){
   const [toast,setToast]=useState("");
   const [isMobile,setIsMobile]=useState(false);
   const [futuresOpen,setFuturesOpen]=useState(false);
-  const [imported,setImported]=useState(false);
   const [refundFor,setRefundFor]=useState(null);
   const [refundAmt,setRefundAmt]=useState("");
   const [cashoutFor,setCashoutFor]=useState(null);
@@ -147,7 +117,6 @@ export default function App(){
     const sb=lsGet("books_v1",null);
     if(sb) setBooks(sb);
     setTxns(lsGet("txns_v1",[]));
-    setImported(lsGet("imported_v1",false));
     const ss=lsGet("sports_v1",null); if(ss) setCustomSports(ss);
     const ms=lsGet("markets_v1",null); if(ms) setCustomMarkets(ms);
     setLoaded(true);
@@ -193,16 +162,6 @@ export default function App(){
       showToast(`${current.bookmaker} ${delta>=0?"+":""}$${delta.toFixed(2)} → $${newBal.toFixed(2)}`);
     } else { showToast(`Marked as ${outcome}`); }
     setRefundFor(null);setRefundAmt("");setCashoutFor(null);setCashoutAmt("");
-  }
-
-  function runImport(){
-    const freshBets=lsGet("bets_v1",[]);
-    const existing=new Set(freshBets.map(b=>b.id));
-    const toAdd=IMPORT_BETS.filter(b=>!existing.has(b.id));
-    const next=[...freshBets,...toAdd];
-    setBets(next); lsSet("bets_v1",next);
-    setImported(true); lsSet("imported_v1",true);
-    showToast(`${toAdd.length} bets imported.`);
   }
 
   // Data export/import for carry-over
@@ -483,15 +442,6 @@ export default function App(){
 
         {tab==="dashboard"&&(
           <div>
-            {!imported&&(
-              <div style={{background:C.card,border:`1px solid ${C.accent}66`,borderRadius:10,padding:"14px 16px",marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:13}}>21 TAB World Cup bets ready to import</div>
-                  <div style={{color:C.muted,fontSize:11}}>$370 staked ($335 cash + $35 bonus). No balance change.</div>
-                </div>
-                <button onClick={runImport} style={{background:C.accent,color:"#fff",border:"none",borderRadius:7,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Import All</button>
-              </div>
-            )}
 
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
               {TIME_FILTERS.map(f=>(
