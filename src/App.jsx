@@ -753,15 +753,15 @@ export default function App(){
                 <button onClick={()=>hfc("isBonus",!form.isBonus)} style={{background:form.isBonus?C.bonus+"33":C.surface,color:form.isBonus?C.bonus:C.muted,border:`1px solid ${form.isBonus?C.bonus:C.border}`,borderRadius:7,padding:"9px 14px",fontSize:12,fontWeight:700,cursor:"pointer",width:"100%"}}>{form.isBonus?"✓ Bonus Bet":"Bonus Bet / Credit"}</button>
               </div>
               {form.isBonus&&<div style={{gridColumn:"1/-1",color:C.bonus,fontSize:11,background:C.bonus+"11",border:`1px solid ${C.bonus}33`,borderRadius:7,padding:"8px 12px"}}>Bonus bet: $0 cost basis, no balance deduction, win pays winnings only.</div>}
-              {!quickMode&&(
-                <>
-                  <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Date</div><input type="date" value={form.date} onChange={e=>hfc("date",e.target.value)} style={iStyle}/></div>
-                  <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Market</div><select value={form.market} onChange={e=>hfc("market",e.target.value)} style={iStyle}>{MARKETS.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-                  <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Outcome</div><select value={form.outcome} onChange={e=>hfc("outcome",e.target.value)} style={iStyle}>{["Pending","Win","Loss","Push"].map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-                  <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>My Probability (%)</div><input type="number" inputMode="decimal" value={form.myProb} onChange={e=>hfc("myProb",e.target.value)} min="0" max="100" step="0.1" placeholder="e.g. 58" style={iStyle}/></div>
-                  <div style={{gridColumn:"1/-1"}}><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Notes</div><textarea value={form.notes} onChange={e=>hfc("notes",e.target.value)} rows={2} style={{...iStyle,resize:"vertical"}}/></div>
-                </>
-              )}
+              <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Market</div><select value={form.market} onChange={e=>hfc("market",e.target.value)} style={iStyle}>{MARKETS.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+{!quickMode&&(
+  <>
+    <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Date</div><input type="date" value={form.date} onChange={e=>hfc("date",e.target.value)} style={iStyle}/></div>
+    <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Outcome</div><select value={form.outcome} onChange={e=>hfc("outcome",e.target.value)} style={iStyle}>{["Pending","Win","Loss","Push"].map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+    <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>My Probability (%)</div><input type="number" inputMode="decimal" value={form.myProb} onChange={e=>hfc("myProb",e.target.value)} min="0" max="100" step="0.1" placeholder="e.g. 58" style={iStyle}/></div>
+    <div style={{gridColumn:"1/-1"}}><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Notes</div><textarea value={form.notes} onChange={e=>hfc("notes",e.target.value)} rows={2} style={{...iStyle,resize:"vertical"}}/></div>
+  </>
+)}
               {liveEV!==null&&<div style={{gridColumn:"1/-1",fontSize:13}}>EV: <span style={{color:evColor(liveEV),fontWeight:700,fontFamily:"monospace"}}>{(liveEV*100).toFixed(2)}%</span></div>}
             </div>
             <div style={{display:"flex",gap:10,marginTop:18}}>
