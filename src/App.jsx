@@ -471,9 +471,10 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
           <span style={{fontWeight:800,fontSize:18,letterSpacing:"-0.02em"}}>EDGE</span>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-            {[["dashboard","Home"],["add",editId?"Edit":"+"],["log","Bets"],["calendar","Calendar"],["accounts","Settings"],["analysis","Analysis"]].map(([k,label])=>(
+            {[["dashboard","Home"],["log","Bets"],["calendar","Calendar"],["accounts","Settings"],["analysis","Analysis"]].map(([k,label])=>(
               <button key={k} onClick={()=>setTab(k)} style={{background:tab===k?C.accent:"transparent",color:tab===k?"#fff":C.muted,border:`1px solid ${tab===k?C.accent:C.border}`,borderRadius:6,padding:isMobile?"7px 10px":"6px 13px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
             ))}
+            <button onClick={()=>setTab("add")} style={{background:tab==="add"?C.accent:C.accent,color:"#fff",border:"none",borderRadius:6,width:32,height:32,fontSize:20,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,flexShrink:0}}>+</button>
           </div>
         </div>
       </div>
