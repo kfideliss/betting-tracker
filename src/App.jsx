@@ -456,7 +456,7 @@ export default function App(){
   const monthName=new Date(calMonth.y,calMonth.m).toLocaleString("en-AU",{month:"long",year:"numeric"});
 
   return(
-    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"'Inter',system-ui,sans-serif",color:C.text}}>
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"'Inter',system-ui,sans-serif",color:C.text,paddingTop:"env(safe-area-inset-top)"}}>
       {toast&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:C.card,border:`1px solid ${C.accent}66`,borderRadius:8,padding:"10px 20px",fontSize:13,zIndex:100,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",maxWidth:"90vw"}}>{toast}</div>}
 
       <div style={{borderBottom:`1px solid ${C.border}`,padding:isMobile?"12px 14px":"16px 24px"}}>
