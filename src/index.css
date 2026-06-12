@@ -1,0 +1,6 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d0f14; color: #e8eaf0; -webkit-font-smoothing: antialiased; }
+input, select, textarea, button { font-family: inherit; }
+button { outline: none; }
+input:focus, select:focus, textarea:focus { outline: 2px solid #1e6fff44; outline-offset: 1px; }
+::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0d0f14; } ::-webkit-scrollbar-thumb { background: #252a38; border-radius: 3px; }
