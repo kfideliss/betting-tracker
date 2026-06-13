@@ -574,7 +574,7 @@ export default function App(){
               <StatCard label="Win Rate" value={`${winRate.toFixed(1)}%`} sub={`${wins.length}W ${losses.length}L`}/>
               <StatCard label="Net P&L" value={fmt(totalPL)} color={totalPL>=0?C.win:C.loss} sub={timeFilter}/>
               <StatCard label="Cash at Risk" value={fmtAbs(cashAtRisk)} color={C.pending} sub={`${pendingAll.length} pending`}/>
-              <StatCard label="Bonus Held" value={fmtAbs(bonusHeld)} color={C.bonus} sub="unplaced credits"/>
+              <StatCard label="Bonus In Play" value={fmtAbs(bonusHeld)} color={C.bonus} sub="on pending bets"/>
             </div>
 
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
