@@ -92,6 +92,7 @@ export default function App(){
   const [selectedSport,setSelectedSport]=useState(null);
   const [visibleBooks,setVisibleBooks]=useState([]);
   const [visibleSports,setVisibleSports]=useState([]);
+  const [sportMetric,setSportMetric]=useState("pl");
   const [refundFor,setRefundFor]=useState(null);
   const [refundAmt,setRefundAmt]=useState("");
   const [cashoutFor,setCashoutFor]=useState(null);
@@ -199,8 +200,8 @@ export default function App(){
   const wins=settled.filter(b=>b.outcome==="Win");
   const losses=settled.filter(b=>b.outcome==="Loss"||b.outcome==="Bonus Refund");
   const pendingAll=bets.filter(b=>b.outcome==="Pending");
-  const pendingRegular=pendingAll.filter(b=>b.betType==="Regular"||b.betType==="Multi");
-  const pendingFutures=pendingAll.filter(b=>b.betType==="Future");
+  const pendingRegular=pendingAll.filter(b=>(b.betType==="Regular"||b.betType==="Multi")&&!b.deferred);
+  const pendingFutures=pendingAll.filter(b=>b.betType==="Future"||b.deferred);
   const totalPL=settled.reduce((acc,b)=>acc+betPL(b),0);
   const totalCost=settled.reduce((acc,b)=>acc+betCost(b),0);
   const roi=totalCost>0?(totalPL/totalCost)*100:0;
@@ -278,6 +279,10 @@ export default function App(){
     return points;
   })();
   const activeSports=SPORTS.filter(s=>settled.some(b=>b.sport===s));
+  const sportStartBankroll=bankrollSeries.points.length?bankrollSeries.points[0].Combined:totalBankroll;
+  const sportChartData=sportMetric==="bankroll"
+    ? sportPLSeries.map(pt=>{const o={date:pt.date};SPORTS.forEach(s=>{o[s]=parseFloat((sportStartBankroll+(pt[s]||0)).toFixed(2));});return o;})
+    : sportPLSeries;
 
   const calibration=(()=>{
     const withProb=settled.filter(b=>b.myProb&&b.outcome!=="Push");
@@ -431,14 +436,25 @@ export default function App(){
     );
   }
 
-  function PendingRow({b}){
+  function setDeferred(bet,val){
+    const fresh=lsGet("bets_v1",[]);
+    const next=fresh.map(b=>b.id===bet.id?{...b,deferred:val}:b);
+    setBets(next);lsSet("bets_v1",next);
+    showToast(val?"Moved to Futures":"Moved to Quick Settle");
+  }
+
+  function PendingRow({b,section}){
     return(
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:`1px solid ${C.border}`,flexWrap:"wrap"}}>
         <div style={{flex:1,minWidth:150}}>
           <div style={{fontSize:13,fontWeight:600}}>{b.match} {b.isBonus&&<Pill label="BB" color={C.bonus}/>}</div>
           <div style={{color:C.muted,fontSize:11}}>{b.bookmaker} · ${parseFloat(b.stake).toFixed(2)} @ {b.odds?parseFloat(b.odds).toFixed(2):"—"}{b.odds?` · returns $${(parseFloat(b.stake)*parseFloat(b.odds)).toFixed(2)}`:""}</div>
         </div>
-        <SettleButtons b={b}/>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <SettleButtons b={b}/>
+          {section==="quick"&&<button onClick={()=>setDeferred(b,true)} style={{background:"transparent",color:C.future,border:`1px solid ${C.future}55`,borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>→ Futures</button>}
+          {section==="futures"&&b.deferred&&<button onClick={()=>setDeferred(b,false)} style={{background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>↩ Quick Settle</button>}
+        </div>
       </div>
     );
   }
@@ -479,7 +495,7 @@ export default function App(){
             {pendingRegular.length>0&&(
               <div style={{background:C.card,border:`1px solid ${C.pending}44`,borderRadius:10,padding:"14px 16px",marginBottom:14}}>
                 <div style={{color:C.pending,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>Pending — Quick Settle</div>
-                {pendingRegular.map(b=><PendingRow key={b.id} b={b}/>)}
+                {pendingRegular.map(b=><PendingRow key={b.id} b={b} section="quick"/>)}
               </div>
             )}
 
@@ -492,7 +508,7 @@ export default function App(){
                   </div>
                   <span style={{color:C.future,fontSize:18,transform:futuresOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▾</span>
                 </button>
-                {futuresOpen&&<div style={{padding:"0 16px 14px"}}>{pendingFutures.map(b=><PendingRow key={b.id} b={b}/>)}</div>}
+                {futuresOpen&&<div style={{padding:"0 16px 14px"}}>{pendingFutures.map(b=><PendingRow key={b.id} b={b} section="futures"/>)}</div>}
               </div>
             )}
 
@@ -557,9 +573,16 @@ export default function App(){
             </div>
 
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>P&L by Sport</div>
-                <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}}>
+                <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>{sportMetric==="bankroll"?"Bankroll by Sport":"P&L by Sport"}</div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <div style={{display:"flex",gap:4}}>
+                    {[["pl","P&L"],["bankroll","Bankroll"]].map(([k,lbl])=>(
+                      <button key={k} onClick={()=>setSportMetric(k)} style={{background:sportMetric===k?C.combined+"33":"transparent",color:sportMetric===k?C.combined:C.muted,border:`1px solid ${sportMetric===k?C.combined:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{lbl}</button>
+                    ))}
+                  </div>
+                  <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
+                </div>
               </div>
               {activeSports.length>0&&(
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
@@ -571,12 +594,12 @@ export default function App(){
               {sportPLSeries.length>1&&activeSports.length>0?(
                 visibleSports.length>0?(
                   <ResponsiveContainer width="100%" height={210}>
-                    <ComposedChart data={sportPLSeries}>
+                    <ComposedChart data={sportChartData}>
                       <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
                       <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
                       <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
                       <Legend wrapperStyle={{fontSize:11}}/>
-                      <ReferenceLine y={0} stroke={C.border}/>
+                      {sportMetric==="pl"&&<ReferenceLine y={0} stroke={C.border}/>}
                       {activeSports.filter(s=>visibleSports.includes(s)).map(s=>(<Line key={s} type="monotone" dataKey={s} stroke={BOOK_COLORS[SPORTS.indexOf(s)%BOOK_COLORS.length]} strokeWidth={2} strokeDasharray="4 2" dot={false}/>))}
                     </ComposedChart>
                   </ResponsiveContainer>
