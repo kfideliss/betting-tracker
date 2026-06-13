@@ -488,7 +488,7 @@ export default function App(){
 
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
               {TIME_FILTERS.map(f=>(
-                <button key={f} onClick={()=>setTimeFilter(f)} style={{background:timeFilter===f?C.combined+"33":"transparent",color:timeFilter===f?C.combined:C.muted,border:`1px solid ${timeFilter===f?C.combined:C.border}`,borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{f}</button>
+                <button key={f} onClick={()=>setTimeFilter(f)} style={{background:timeFilter===f?C.combined+"33":C.surface,color:timeFilter===f?C.combined:C.text,border:`1px solid ${timeFilter===f?C.combined:C.border}`,borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{f}</button>
               ))}
             </div>
 
@@ -543,7 +543,7 @@ export default function App(){
               {books.length>0&&(
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
                   {books.map(bk=>{const on=visibleBooks.includes(bk.name);return(
-                    <button key={bk.name} onClick={()=>setVisibleBooks(v=>v.includes(bk.name)?v.filter(x=>x!==bk.name):[...v,bk.name])} style={{background:on?bk.color+"22":"transparent",color:on?bk.color:C.muted,border:`1px solid ${on?bk.color:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{bk.name}</button>
+                    <button key={bk.name} onClick={()=>setVisibleBooks(v=>v.includes(bk.name)?v.filter(x=>x!==bk.name):[...v,bk.name])} style={{background:on?bk.color+"22":C.surface,color:on?bk.color:C.text,border:`1px solid ${on?bk.color:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{bk.name}</button>
                   );})}
                 </div>
               )}
@@ -578,7 +578,7 @@ export default function App(){
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
                   <div style={{display:"flex",gap:4}}>
                     {[["pl","P&L"],["bankroll","Bankroll"]].map(([k,lbl])=>(
-                      <button key={k} onClick={()=>setSportMetric(k)} style={{background:sportMetric===k?C.combined+"33":"transparent",color:sportMetric===k?C.combined:C.muted,border:`1px solid ${sportMetric===k?C.combined:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{lbl}</button>
+                      <button key={k} onClick={()=>setSportMetric(k)} style={{background:sportMetric===k?C.combined+"33":C.surface,color:sportMetric===k?C.combined:C.text,border:`1px solid ${sportMetric===k?C.combined:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{lbl}</button>
                     ))}
                   </div>
                   <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
@@ -587,7 +587,7 @@ export default function App(){
               {activeSports.length>0&&(
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
                   {activeSports.map(s=>{const col=BOOK_COLORS[SPORTS.indexOf(s)%BOOK_COLORS.length];const on=visibleSports.includes(s);return(
-                    <button key={s} onClick={()=>setVisibleSports(v=>v.includes(s)?v.filter(x=>x!==s):[...v,s])} style={{background:on?col+"22":"transparent",color:on?col:C.muted,border:`1px solid ${on?col:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{s}</button>
+                    <button key={s} onClick={()=>setVisibleSports(v=>v.includes(s)?v.filter(x=>x!==s):[...v,s])} style={{background:on?col+"22":C.surface,color:on?col:C.text,border:`1px solid ${on?col:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{s}</button>
                   );})}
                 </div>
               )}
