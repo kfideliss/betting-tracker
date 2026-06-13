@@ -89,6 +89,9 @@ export default function App(){
   const [toast,setToast]=useState("");
   const [isMobile,setIsMobile]=useState(false);
   const [futuresOpen,setFuturesOpen]=useState(false);
+  const [selectedSport,setSelectedSport]=useState(null);
+  const [visibleBooks,setVisibleBooks]=useState([]);
+  const [visibleSports,setVisibleSports]=useState([]);
   const [refundFor,setRefundFor]=useState(null);
   const [refundAmt,setRefundAmt]=useState("");
   const [cashoutFor,setCashoutFor]=useState(null);
@@ -196,8 +199,8 @@ export default function App(){
   const wins=settled.filter(b=>b.outcome==="Win");
   const losses=settled.filter(b=>b.outcome==="Loss"||b.outcome==="Bonus Refund");
   const pendingAll=bets.filter(b=>b.outcome==="Pending");
-  const pendingRegular=pendingAll.filter(b=>b.betType==="Regular");
-  const pendingFutures=pendingAll.filter(b=>b.betType==="Future"||b.betType==="Multi");
+  const pendingRegular=pendingAll.filter(b=>b.betType==="Regular"||b.betType==="Multi");
+  const pendingFutures=pendingAll.filter(b=>b.betType==="Future");
   const totalPL=settled.reduce((acc,b)=>acc+betPL(b),0);
   const totalCost=settled.reduce((acc,b)=>acc+betCost(b),0);
   const roi=totalCost>0?(totalPL/totalCost)*100:0;
@@ -251,6 +254,30 @@ export default function App(){
     const w=sb.filter(b=>b.outcome==="Win").length;
     return{sport:s,pl:parseFloat(pl.toFixed(2)),roi:cost>0?(pl/cost)*100:0,strike:(w/sb.length)*100,count:sb.length};
   }).filter(Boolean);
+
+  function marketBreakdownForSport(sport){
+    return MARKETS.map(m=>{
+      const mb=settled.filter(b=>b.sport===sport&&b.market===m);
+      const pl=parseFloat(mb.reduce((a,b)=>a+betPL(b),0).toFixed(2));
+      const cost=mb.reduce((a,b)=>a+betCost(b),0);
+      return{market:m==="Same Game Multi"?"SGM":m==="Head-to-Head"?"H2H":m.split("/")[0].split(" ")[0],pl,roi:cost>0?(pl/cost)*100:0,count:mb.length};
+    }).filter(m=>m.count>0);
+  }
+
+  const sportPLSeries=(()=>{
+    const events=settledAll
+      .filter(b=>inTimeFilter(settleDate(b),timeFilter))
+      .map(b=>({date:settleDate(b),sport:b.sport,pl:betPL(b)}))
+      .sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const running=Object.fromEntries(SPORTS.map(s=>[s,0]));
+    const points=[{date:"Start",...Object.fromEntries(SPORTS.map(s=>[s,0]))}];
+    events.forEach(e=>{
+      running[e.sport]=(running[e.sport]||0)+e.pl;
+      points.push({date:e.date.slice(5),...Object.fromEntries(SPORTS.map(s=>[s,parseFloat(running[s].toFixed(2))]))});
+    });
+    return points;
+  })();
+  const activeSports=SPORTS.filter(s=>settled.some(b=>b.sport===s));
 
   const calibration=(()=>{
     const withProb=settled.filter(b=>b.myProb&&b.outcome!=="Push");
@@ -460,7 +487,7 @@ export default function App(){
               <div style={{background:C.card,border:`1px solid ${C.future}44`,borderRadius:10,marginBottom:14,overflow:"hidden"}}>
                 <button onClick={()=>setFuturesOpen(!futuresOpen)} style={{width:"100%",background:"transparent",border:"none",padding:"14px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",color:C.text}}>
                   <div style={{textAlign:"left"}}>
-                    <div style={{color:C.future,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700}}>Futures & Multis ({pendingFutures.length})</div>
+                    <div style={{color:C.future,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700}}>Futures ({pendingFutures.length})</div>
                     <div style={{color:C.muted,fontSize:11,marginTop:2}}>${futuresExposure.toFixed(2)} cash at risk · ${futuresPotential.toFixed(2)} max collect</div>
                   </div>
                   <span style={{color:C.future,fontSize:18,transform:futuresOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▾</span>
@@ -497,6 +524,13 @@ export default function App(){
                 <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>Bankroll History</div>
                 <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
               </div>
+              {books.length>0&&(
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+                  {books.map(bk=>{const on=visibleBooks.includes(bk.name);return(
+                    <button key={bk.name} onClick={()=>setVisibleBooks(v=>v.includes(bk.name)?v.filter(x=>x!==bk.name):[...v,bk.name])} style={{background:on?bk.color+"22":"transparent",color:on?bk.color:C.muted,border:`1px solid ${on?bk.color:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{bk.name}</button>
+                  );})}
+                </div>
+              )}
               {bankrollSeries.points.length>1?(
                 <ResponsiveContainer width="100%" height={210}>
                   <ComposedChart data={bankrollSeries.points}>
@@ -511,7 +545,7 @@ export default function App(){
                     <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
                     <Legend wrapperStyle={{fontSize:11}}/>
                     <Area type="monotone" dataKey="Combined" stroke={C.combined} strokeWidth={3} fill="url(#combinedGrad)" dot={false}/>
-                    {books.map(bk=>(<Line key={bk.name} type="monotone" dataKey={bk.name} stroke={bk.color} strokeWidth={1.5} strokeDasharray="4 2" dot={false}/>))}
+                    {books.filter(bk=>visibleBooks.includes(bk.name)).map(bk=>(<Line key={bk.name} type="monotone" dataKey={bk.name} stroke={bk.color} strokeWidth={1.5} strokeDasharray="4 2" dot={false}/>))}
                   </ComposedChart>
                 </ResponsiveContainer>
               ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Settle bets or log transactions to see your curve.</div>}
@@ -520,6 +554,34 @@ export default function App(){
                   {bankrollSeries.txnMarkers.map((m,i)=><span key={i} style={{color:m.kind==="deposit"?C.win:C.loss,fontSize:11}}>{m.kind==="deposit"?"▲":"▼"} {m.date}</span>)}
                 </div>
               )}
+            </div>
+
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>P&L by Sport</div>
+                <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
+              </div>
+              {activeSports.length>0&&(
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+                  {activeSports.map(s=>{const col=BOOK_COLORS[SPORTS.indexOf(s)%BOOK_COLORS.length];const on=visibleSports.includes(s);return(
+                    <button key={s} onClick={()=>setVisibleSports(v=>v.includes(s)?v.filter(x=>x!==s):[...v,s])} style={{background:on?col+"22":"transparent",color:on?col:C.muted,border:`1px solid ${on?col:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{s}</button>
+                  );})}
+                </div>
+              )}
+              {sportPLSeries.length>1&&activeSports.length>0?(
+                visibleSports.length>0?(
+                  <ResponsiveContainer width="100%" height={210}>
+                    <ComposedChart data={sportPLSeries}>
+                      <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
+                      <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
+                      <Legend wrapperStyle={{fontSize:11}}/>
+                      <ReferenceLine y={0} stroke={C.border}/>
+                      {activeSports.filter(s=>visibleSports.includes(s)).map(s=>(<Line key={s} type="monotone" dataKey={s} stroke={BOOK_COLORS[SPORTS.indexOf(s)%BOOK_COLORS.length]} strokeWidth={2} strokeDasharray="4 2" dot={false}/>))}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Toggle a sport above to plot its cumulative P&L.</div>
+              ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Settle bets to see cumulative P&L by sport.</div>}
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>
@@ -545,21 +607,49 @@ export default function App(){
               {sportBreakdown.length>0&&(()=>{const maxAbs=Math.max(...sportBreakdown.map(s=>Math.abs(s.pl)),1);return(
                 <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px"}}>
                   <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>By Sport</div>
-                  {sportBreakdown.map(s=>(
+                  {sportBreakdown.map(s=>{
+                    const open=selectedSport===s.sport;
+                    const subRows=open?marketBreakdownForSport(s.sport):[];
+                    const subMax=Math.max(...subRows.map(m=>Math.abs(m.pl)),1);
+                    return(
                     <div key={s.sport} style={{borderTop:`1px solid ${C.border}`,paddingTop:8,paddingBottom:4}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                        <div style={{fontSize:13,fontWeight:600}}>{s.sport} <span style={{color:C.muted,fontSize:10}}>({s.count})</span></div>
-                        <div style={{display:"flex",gap:14,fontFamily:"monospace",fontSize:12}}>
-                          <span style={{color:C.muted}}>{s.strike.toFixed(0)}% SR</span>
-                          <span style={{color:s.roi>=0?C.win:C.loss}}>{s.roi.toFixed(0)}% ROI</span>
-                          <span style={{color:s.pl>=0?C.win:C.loss}}>{fmt(s.pl)}</span>
+                      <div onClick={()=>setSelectedSport(open?null:s.sport)} style={{cursor:"pointer"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                          <div style={{fontSize:13,fontWeight:600}}>
+                            <span style={{color:C.muted,fontSize:9,marginRight:5,display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform 0.2s"}}>▸</span>
+                            {s.sport} <span style={{color:C.muted,fontSize:10}}>({s.count})</span>
+                          </div>
+                          <div style={{display:"flex",gap:14,fontFamily:"monospace",fontSize:12}}>
+                            <span style={{color:C.muted}}>{s.strike.toFixed(0)}% SR</span>
+                            <span style={{color:s.roi>=0?C.win:C.loss}}>{s.roi.toFixed(0)}% ROI</span>
+                            <span style={{color:s.pl>=0?C.win:C.loss}}>{fmt(s.pl)}</span>
+                          </div>
+                        </div>
+                        <div style={{height:3,borderRadius:2,background:C.border,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${(Math.abs(s.pl)/maxAbs)*100}%`,background:s.pl>=0?C.win:C.loss,borderRadius:2}}/>
                         </div>
                       </div>
-                      <div style={{height:3,borderRadius:2,background:C.border,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:`${(Math.abs(s.pl)/maxAbs)*100}%`,background:s.pl>=0?C.win:C.loss,borderRadius:2}}/>
-                      </div>
+                      {open&&(
+                        <div style={{marginTop:8,marginLeft:14,paddingLeft:10,borderLeft:`1px solid ${C.border}`}}>
+                          {subRows.length>0?subRows.map(m=>(
+                            <div key={m.market} style={{paddingTop:6,paddingBottom:2}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                                <div style={{fontSize:12,color:C.text}}>{m.market} <span style={{color:C.muted,fontSize:10}}>({m.count})</span></div>
+                                <div style={{display:"flex",gap:12,fontFamily:"monospace",fontSize:11}}>
+                                  <span style={{color:m.roi>=0?C.win:C.loss}}>{m.roi.toFixed(0)}% ROI</span>
+                                  <span style={{color:m.pl>=0?C.win:C.loss}}>{fmt(m.pl)}</span>
+                                </div>
+                              </div>
+                              <div style={{height:3,borderRadius:2,background:C.border,overflow:"hidden"}}>
+                                <div style={{height:"100%",width:`${(Math.abs(m.pl)/subMax)*100}%`,background:m.pl>=0?C.win:C.loss,borderRadius:2}}/>
+                              </div>
+                            </div>
+                          )):<div style={{color:C.muted,fontSize:11,padding:"6px 0"}}>No settled bets by market for {s.sport}.</div>}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               );})()}
             </div>
