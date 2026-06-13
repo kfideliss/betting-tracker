@@ -12,7 +12,7 @@ const C = {
 const BOOK_COLORS = ["#1e6fff","#00a651","#f97316","#ec4899","#14b8a6","#eab308","#8b5cf6","#ef4444"];
 const SPORTS = ["AFL","Soccer","NRL","NBA","Other"];
 const MARKETS = ["Head-to-Head","Line/Handicap","Player Stats","Same Game Multi","Over/Under","Futures Market","Other"];
-const BET_TYPES = ["Regular","Future","Multi"];
+const BET_TYPES = ["Regular","Live","Future","Multi"];
 const OUTCOMES = ["Pending","Win","Loss","Push","Bonus Refund","Cashed Out"];
 const STAKE_PRESETS = [5,10,20,25,50];
 const TIME_FILTERS = ["All Time","YTD","This Month","This Week"];
@@ -93,8 +93,7 @@ export default function App(){
   const [futuresOpen,setFuturesOpen]=useState(false);
   const [selectedSport,setSelectedSport]=useState(null);
   const [visibleBooks,setVisibleBooks]=useState([]);
-  const [visibleSports,setVisibleSports]=useState([]);
-  const [sportMetric,setSportMetric]=useState("pl");
+  const [visibleSports,setVisibleSports]=useState([...SPORTS]);
   const [refundFor,setRefundFor]=useState(null);
   const [refundAmt,setRefundAmt]=useState("");
   const [cashoutFor,setCashoutFor]=useState(null);
@@ -206,7 +205,7 @@ export default function App(){
   const wins=settled.filter(b=>b.outcome==="Win");
   const losses=settled.filter(b=>b.outcome==="Loss"||b.outcome==="Bonus Refund");
   const pendingAll=bets.filter(b=>b.outcome==="Pending");
-  const pendingRegular=pendingAll.filter(b=>(b.betType==="Regular"||b.betType==="Multi")&&!b.deferred);
+  const pendingRegular=pendingAll.filter(b=>(b.betType==="Regular"||b.betType==="Multi"||b.betType==="Live")&&!b.deferred);
   const pendingFutures=pendingAll.filter(b=>b.betType==="Future"||b.deferred);
   const totalPL=settled.reduce((acc,b)=>acc+betPL(b),0);
   const totalCost=settled.reduce((acc,b)=>acc+betCost(b),0);
@@ -299,10 +298,6 @@ export default function App(){
     return points;
   })();
   const activeSports=SPORTS.filter(s=>settledAll.some(b=>b.sport===s&&inTimeFilter(settleDate(b),chartFilter)));
-  const sportStartBankroll=bankrollSeries.points.length?bankrollSeries.points[0].Combined:totalBankroll;
-  const sportChartData=sportMetric==="bankroll"
-    ? sportPLSeries.map(pt=>{const o={date:pt.date};SPORTS.forEach(s=>{o[s]=parseFloat((sportStartBankroll+(pt[s]||0)).toFixed(2));});return o;})
-    : sportPLSeries;
 
   const calibration=(()=>{
     const withProb=settled.filter(b=>b.myProb&&b.outcome!=="Push");
@@ -616,15 +611,8 @@ export default function App(){
 
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}}>
-                <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>{sportMetric==="bankroll"?"Bankroll by Sport":"P&L by Sport"}</div>
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  <div style={{display:"flex",gap:4}}>
-                    {[["pl","P&L"],["bankroll","Bankroll"]].map(([k,lbl])=>(
-                      <button key={k} onClick={()=>setSportMetric(k)} style={{background:sportMetric===k?C.combined+"33":C.surface,color:sportMetric===k?C.combined:C.text,border:`1px solid ${sportMetric===k?C.combined:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{lbl}</button>
-                    ))}
-                  </div>
-                  <select value={chartFilter} onChange={e=>setChartFilter(e.target.value)} style={{background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{TIME_FILTERS.map(f=><option key={f} value={f}>{f}</option>)}</select>
-                </div>
+                <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>P&L by Sport</div>
+                <select value={chartFilter} onChange={e=>setChartFilter(e.target.value)} style={{background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{TIME_FILTERS.map(f=><option key={f} value={f}>{f}</option>)}</select>
               </div>
               {activeSports.length>0&&(
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
@@ -636,12 +624,12 @@ export default function App(){
               {sportPLSeries.length>1&&activeSports.length>0?(
                 visibleSports.length>0?(
                   <ResponsiveContainer width="100%" height={210}>
-                    <ComposedChart data={sportChartData}>
+                    <ComposedChart data={sportPLSeries}>
                       <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
                       <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
                       <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
                       <Legend wrapperStyle={{fontSize:11}}/>
-                      {sportMetric==="pl"&&<ReferenceLine y={0} stroke={C.border}/>}
+                      <ReferenceLine y={0} stroke={C.border}/>
                       {activeSports.filter(s=>visibleSports.includes(s)).map(s=>(<Line key={s} type="monotone" dataKey={s} stroke={BOOK_COLORS[SPORTS.indexOf(s)%BOOK_COLORS.length]} strokeWidth={2} strokeDasharray="4 2" dot={false}/>))}
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -970,6 +958,7 @@ export default function App(){
                           <Pill label={b.sport} color={C.accent}/>
                           <Pill label={b.bookmaker} color={bookColor(b.bookmaker)}/>
                           {(b.betType==="Future"||b.betType==="Multi")&&<Pill label={b.betType} color={C.future}/>}
+                          {b.betType==="Live"&&<Pill label="Live" color={C.cashout}/>}
                           {b.isBonus&&<Pill label="BB" color={C.bonus}/>}
                           <Pill label={b.outcome} color={ocColor(b.outcome)}/>
                         </div>
