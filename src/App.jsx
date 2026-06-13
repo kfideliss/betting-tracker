@@ -21,6 +21,7 @@ const DEFAULT_BOOKS = [
   { name:"Bet365", balance:54.50, color:"#00a651" },
 ];
 
+function daysUntil(dateStr){ if(!dateStr) return null; const d=new Date(dateStr+"T00:00:00"); const n=new Date(); n.setHours(0,0,0,0); return Math.round((d-n)/86400000); }
 function fmt(n){ return n>=0?`+$${n.toFixed(2)}`:`-$${Math.abs(n).toFixed(2)}`; }
 function fmtAbs(n){ return `$${Math.abs(n).toFixed(2)}`; }
 function evColor(ev){ return ev===null?C.muted:ev>=0?C.win:C.loss; }
@@ -109,6 +110,8 @@ export default function App(){
   const [customMarkets,setCustomMarkets]=useState(MARKETS);
   const [newSportName,setNewSportName]=useState("");
   const [newMarketName,setNewMarketName]=useState("");
+  const [credits,setCredits]=useState([]);
+  const [creditForm,setCreditForm]=useState({book:"",amount:"",source:"",expiry:""});
 
   useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<640);
@@ -124,6 +127,7 @@ export default function App(){
     setTxns(lsGet("txns_v1",[]));
     const ss=lsGet("sports_v1",null); if(ss) setCustomSports(ss);
     const ms=lsGet("markets_v1",null); if(ms) setCustomMarkets(ms);
+    setCredits(lsGet("credits_v1",[]));
     setLoaded(true);
   },[authed]);
 
@@ -131,6 +135,7 @@ export default function App(){
   const persistBets=useCallback(async(next)=>{setBets(next);lsSet("bets_v1",next);},[]);
   const persistBooks=useCallback(async(next)=>{setBooks(next);lsSet("books_v1",next);},[]);
   const persistTxns=useCallback(async(next)=>{setTxns(next);lsSet("txns_v1",next);},[]);
+  const persistCredits=useCallback(async(next)=>{setCredits(next);lsSet("credits_v1",next);},[]);
 
   function bookColor(name){return books.find(b=>b.name===name)?.color||C.muted;}
   const bookNames=books.map(b=>b.name);
@@ -214,6 +219,20 @@ export default function App(){
   const bonusHeld=pendingAll.filter(b=>b.isBonus).reduce((a,b)=>a+parseFloat(b.stake||0),0);
   const futuresExposure=pendingFutures.reduce((a,b)=>a+(b.isBonus?0:parseFloat(b.stake||0)),0);
   const futuresPotential=pendingFutures.reduce((a,b)=>a+(b.odds?parseFloat(b.stake)*parseFloat(b.odds):0),0);
+
+  const todayStr=new Date().toISOString().slice(0,10);
+  const creditsAvailable=credits.filter(c=>c.status!=="used"&&(!c.expiry||c.expiry>=todayStr)).sort((a,b)=>(a.expiry||"9999").localeCompare(b.expiry||"9999"));
+  const creditsExpired=credits.filter(c=>c.status!=="used"&&c.expiry&&c.expiry<todayStr);
+  const creditAvailValue=creditsAvailable.reduce((a,c)=>a+parseFloat(c.amount||0),0);
+  const creditsExpiringSoon=creditsAvailable.filter(c=>{const d=daysUntil(c.expiry);return d!==null&&d<=7;});
+  const bonusBetsAll=bets.filter(b=>b.isBonus);
+  const bonusPending=bonusBetsAll.filter(b=>b.outcome==="Pending");
+  const bonusSettled=bonusBetsAll.filter(b=>b.outcome!=="Pending");
+  const bonusWins=bonusSettled.filter(b=>b.outcome==="Win"||b.outcome==="Cashed Out").length;
+  const bonusCashWon=bonusSettled.reduce((a,b)=>a+betPL(b),0);
+  const bonusFaceStaked=bonusSettled.reduce((a,b)=>a+parseFloat(b.stake||0),0);
+  const bonusConversion=bonusFaceStaked>0?(bonusCashWon/bonusFaceStaked)*100:0;
+  const bonusWinRate=bonusSettled.length>0?(bonusWins/bonusSettled.length)*100:0;
 
   const bankrollSeries=(()=>{
     const events=[];
@@ -345,11 +364,17 @@ export default function App(){
   function submitBet(){
     if(!form.match||!form.stake||!form.odds){showToast("Match, stake, and odds are required");return;}
     const isFT=form.betType==="Future"||form.betType==="Multi";
+    const creditId=form._creditId;
     const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(bets.find(b=>b.id===editId)?.deducted??false):(isFT&&!form.isBonus)};
+    delete bet._creditId;
     const next=editId?bets.map(b=>b.id===editId?bet:b):[...bets,bet];
     const wasEdit=!!editId;
     if(editId) setEditId(null);
     persistBets(next);
+    if(!wasEdit&&creditId&&bet.isBonus){
+      const nc=lsGet("credits_v1",credits).map(c=>c.id===creditId?{...c,status:"used",usedBetId:bet.id,usedDate:new Date().toISOString().slice(0,10)}:c);
+      persistCredits(nc);
+    }
     if(!wasEdit&&isFT&&!bet.isBonus){
       const newBal=adjustBalance(bet.bookmaker,-bet.stake);
       showToast(`${bet.betType} logged. ${bet.bookmaker} -$${bet.stake.toFixed(2)} → $${newBal.toFixed(2)}`);
@@ -390,6 +415,22 @@ export default function App(){
     persistTxns(txns.filter(x=>x.id!==t.id));
     adjustBalance(t.book,t.type==="deposit"?-t.amount:t.amount);
     showToast("Transaction removed");
+  }
+
+  function addCredit(){
+    if(!creditForm.amount||parseFloat(creditForm.amount)<=0){showToast("Enter a credit amount");return;}
+    const c={id:Date.now().toString(),book:creditForm.book||bookNames[0],amount:parseFloat(creditForm.amount),source:creditForm.source.trim(),expiry:creditForm.expiry||"",dateReceived:new Date().toISOString().slice(0,10),status:"available"};
+    persistCredits([...credits,c]);
+    setCreditForm({book:creditForm.book,amount:"",source:"",expiry:""});
+    showToast("Bonus credit added");
+  }
+  function deleteCredit(id){ persistCredits(credits.filter(c=>c.id!==id)); showToast("Credit removed"); }
+  function placeCredit(c){
+    setEditId(null);
+    setForm({...emptyForm,isBonus:true,bookmaker:c.book,stake:parseFloat(c.amount).toString(),betType:"Regular",_creditId:c.id});
+    setQuickMode(false);
+    setTab("add");
+    showToast(`Placing $${parseFloat(c.amount).toFixed(2)} ${c.book} bonus — fill in the bet`);
   }
 
   async function generateAISummary(){
@@ -474,7 +515,7 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
           <span style={{fontWeight:800,fontSize:18,letterSpacing:"-0.02em",background:"linear-gradient(135deg, #1e6fff, #a78bfa)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>EDGE</span>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-            {[["dashboard","Home"],["log","Bets"],["calendar","Calendar"],["accounts","Settings"],["analysis","Analysis"]].map(([k,label])=>(
+            {[["dashboard","Home"],["log","Bets"],["bonuses","Bonuses"],["calendar","Calendar"],["accounts","Settings"],["analysis","Analysis"]].map(([k,label])=>(
               <button key={k} onClick={()=>setTab(k)} style={{background:tab===k?C.accent:"transparent",color:tab===k?"#fff":C.muted,border:`1px solid ${tab===k?C.accent:C.border}`,borderRadius:6,padding:isMobile?"7px 10px":"6px 13px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
             ))}
             <button onClick={()=>setTab("add")} style={{background:tab==="add"?C.accent:C.accent,color:"#fff",border:"none",borderRadius:6,width:32,height:32,fontSize:20,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,flexShrink:0}}>+</button>
@@ -950,6 +991,89 @@ export default function App(){
                   </div>
                 );
               })}
+          </div>
+        )}
+
+        {tab==="bonuses"&&(
+          <div>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:16}}>Bonus Bets</div>
+
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginBottom:18}}>
+              <StatCard label="Credits Available" value={fmtAbs(creditAvailValue)} color={C.bonus} sub={`${creditsAvailable.length} credit${creditsAvailable.length===1?"":"s"}`}/>
+              <StatCard label="Expiring ≤7d" value={creditsExpiringSoon.length.toString()} color={creditsExpiringSoon.length>0?C.loss:C.muted} sub="use them soon"/>
+              <StatCard label="Cash Extracted" value={fmt(bonusCashWon)} color={bonusCashWon>=0?C.win:C.loss} sub={`${bonusSettled.length} settled`}/>
+              <StatCard label="Conversion" value={`${bonusConversion.toFixed(0)}%`} color={C.cashout} sub={`${bonusWinRate.toFixed(0)}% win rate`}/>
+            </div>
+
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
+              <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>Add Bonus Credit</div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:10}}>
+                <div><div style={{color:C.muted,fontSize:11,marginBottom:4}}>Bookie</div><select value={creditForm.book||bookNames[0]} onChange={e=>setCreditForm(f=>({...f,book:e.target.value}))} style={iStyle}>{bookNames.map(b=><option key={b} value={b}>{b}</option>)}</select></div>
+                <div><div style={{color:C.muted,fontSize:11,marginBottom:4}}>Amount ($)</div><input value={creditForm.amount} onChange={e=>setCreditForm(f=>({...f,amount:e.target.value}))} type="number" inputMode="decimal" placeholder="e.g. 50" style={iStyle}/></div>
+                <div><div style={{color:C.muted,fontSize:11,marginBottom:4}}>Source / Promo</div><input value={creditForm.source} onChange={e=>setCreditForm(f=>({...f,source:e.target.value}))} placeholder="e.g. Sign-up offer" style={iStyle}/></div>
+                <div><div style={{color:C.muted,fontSize:11,marginBottom:4}}>Expiry</div><input value={creditForm.expiry} onChange={e=>setCreditForm(f=>({...f,expiry:e.target.value}))} type="date" style={iStyle}/></div>
+              </div>
+              <button onClick={addCredit} style={{background:C.accent,color:"#fff",border:"none",borderRadius:7,padding:"10px 20px",fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12}}>Add Credit</button>
+            </div>
+
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
+              <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Available Credits ({creditsAvailable.length})</div>
+              {creditsAvailable.length===0
+                ?<div style={{color:C.muted,fontSize:13,padding:"16px 0",textAlign:"center"}}>No bonus credits on hand. Add one above when a bookie gives you a bonus.</div>
+                :creditsAvailable.map(c=>{
+                  const d=daysUntil(c.expiry);
+                  const expCol=d===null?C.muted:d<=3?C.loss:d<=7?C.push:C.muted;
+                  return(
+                  <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderTop:`1px solid ${C.border}`,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:160}}>
+                      <div style={{fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <Pill label={c.book} color={bookColor(c.book)}/>
+                        <span style={{fontFamily:"monospace"}}>${parseFloat(c.amount).toFixed(2)}</span>
+                        {c.source&&<span style={{color:C.muted,fontSize:11,fontWeight:400}}>{c.source}</span>}
+                      </div>
+                      <div style={{fontSize:11,marginTop:3,color:expCol}}>{c.expiry?(d<0?`Expired`:d===0?`Expires today`:`Expires ${c.expiry} · ${d}d left`):"No expiry"}</div>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <button onClick={()=>placeCredit(c)} style={sBtn(C.bonus)}>Place</button>
+                      <button onClick={()=>deleteCredit(c.id)} style={{background:"transparent",color:C.loss,border:`1px solid ${C.loss}44`,borderRadius:5,padding:"6px 10px",fontSize:11,cursor:"pointer"}}>Delete</button>
+                    </div>
+                  </div>
+                  );
+                })}
+              {creditsExpired.length>0&&(
+                <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+                  <div style={{color:C.muted,fontSize:11,marginBottom:6}}>Expired ({creditsExpired.length})</div>
+                  {creditsExpired.map(c=>(
+                    <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",opacity:0.55,gap:8}}>
+                      <div style={{fontSize:12}}>{c.book} · ${parseFloat(c.amount).toFixed(2)} {c.source&&<span style={{color:C.muted}}>· {c.source}</span>} <span style={{color:C.loss,fontSize:10}}>expired {c.expiry}</span></div>
+                      <button onClick={()=>deleteCredit(c.id)} style={{background:"transparent",color:C.loss,border:`1px solid ${C.loss}44`,borderRadius:5,padding:"4px 9px",fontSize:10,cursor:"pointer"}}>Delete</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px"}}>
+              <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Bonus Bets ({bonusBetsAll.length})</div>
+              {bonusBetsAll.length===0
+                ?<div style={{color:C.muted,fontSize:13,padding:"16px 0",textAlign:"center"}}>No bonus bets placed yet. Use "Place" on a credit, or tick "Bonus Bet" when logging a bet.</div>
+                :[...bonusPending,...bonusSettled].map(b=>{
+                  const showPL=b.outcome!=="Pending"&&b.outcome!=="Push";
+                  const pl=showPL?betPL(b):null;
+                  return(
+                  <div key={b.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:`1px solid ${C.border}`,gap:8,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:150}}>
+                      <div style={{fontSize:13,fontWeight:600}}>{b.match}</div>
+                      <div style={{color:C.muted,fontSize:11}}>{b.bookmaker} · ${parseFloat(b.stake).toFixed(2)} @ {b.odds?parseFloat(b.odds).toFixed(2):"—"} · {b.date}</div>
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <Pill label={b.outcome} color={ocColor(b.outcome)}/>
+                      {pl!==null&&<span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:pl>=0?C.win:C.loss}}>{fmt(pl)}</span>}
+                    </div>
+                  </div>
+                  );
+                })}
+            </div>
           </div>
         )}
 
