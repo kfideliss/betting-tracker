@@ -76,6 +76,7 @@ export default function App(){
   const [txns,setTxns]=useState([]);
   const [tab,setTab]=useState("dashboard");
   const [timeFilter,setTimeFilter]=useState("All Time");
+  const [chartFilter,setChartFilter]=useState("All Time");
   const [aiSummary,setAiSummary]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
   const emptyForm={date:new Date().toISOString().slice(0,10),sport:"AFL",market:"Head-to-Head",bookmaker:"TAB",match:"",stake:"",odds:"",myProb:"",outcome:"Pending",notes:"",betType:"Regular",isBonus:false};
@@ -218,7 +219,7 @@ export default function App(){
     const events=[];
     settledAll.forEach(b=>events.push({date:settleDate(b),book:b.bookmaker,delta:balanceEffect(b,b.outcome),kind:"bet"}));
     txns.forEach(t=>events.push({date:t.date,book:t.book,delta:t.type==="deposit"?parseFloat(t.amount):-parseFloat(t.amount),kind:t.type}));
-    const filtered=events.filter(e=>inTimeFilter(e.date,timeFilter)).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const filtered=events.filter(e=>inTimeFilter(e.date,chartFilter)).sort((a,b)=>new Date(a.date)-new Date(b.date));
     const start={};
     books.forEach(bk=>{const s=filtered.filter(e=>e.book===bk.name).reduce((a,e)=>a+e.delta,0);start[bk.name]=bk.balance-s;});
     const running={...start};
@@ -267,7 +268,7 @@ export default function App(){
 
   const sportPLSeries=(()=>{
     const events=settledAll
-      .filter(b=>inTimeFilter(settleDate(b),timeFilter))
+      .filter(b=>inTimeFilter(settleDate(b),chartFilter))
       .map(b=>({date:settleDate(b),sport:b.sport,pl:betPL(b)}))
       .sort((a,b)=>new Date(a.date)-new Date(b.date));
     const running=Object.fromEntries(SPORTS.map(s=>[s,0]));
@@ -278,7 +279,7 @@ export default function App(){
     });
     return points;
   })();
-  const activeSports=SPORTS.filter(s=>settled.some(b=>b.sport===s));
+  const activeSports=SPORTS.filter(s=>settledAll.some(b=>b.sport===s&&inTimeFilter(settleDate(b),chartFilter)));
   const sportStartBankroll=bankrollSeries.points.length?bankrollSeries.points[0].Combined:totalBankroll;
   const sportChartData=sportMetric==="bankroll"
     ? sportPLSeries.map(pt=>{const o={date:pt.date};SPORTS.forEach(s=>{o[s]=parseFloat((sportStartBankroll+(pt[s]||0)).toFixed(2));});return o;})
@@ -538,7 +539,7 @@ export default function App(){
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                 <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>Bankroll History</div>
-                <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
+                <select value={chartFilter} onChange={e=>setChartFilter(e.target.value)} style={{background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{TIME_FILTERS.map(f=><option key={f} value={f}>{f}</option>)}</select>
               </div>
               {books.length>0&&(
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
@@ -581,7 +582,7 @@ export default function App(){
                       <button key={k} onClick={()=>setSportMetric(k)} style={{background:sportMetric===k?C.combined+"33":C.surface,color:sportMetric===k?C.combined:C.text,border:`1px solid ${sportMetric===k?C.combined:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{lbl}</button>
                     ))}
                   </div>
-                  <div style={{color:C.muted,fontSize:11}}>{timeFilter}</div>
+                  <select value={chartFilter} onChange={e=>setChartFilter(e.target.value)} style={{background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{TIME_FILTERS.map(f=><option key={f} value={f}>{f}</option>)}</select>
                 </div>
               </div>
               {activeSports.length>0&&(
