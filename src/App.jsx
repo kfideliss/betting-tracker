@@ -93,8 +93,9 @@ export default function App(){
   const [futuresOpen,setFuturesOpen]=useState(false);
   const [selectedSport,setSelectedSport]=useState(null);
   const [visibleBooks,setVisibleBooks]=useState([]);
-  const [visibleSports,setVisibleSports]=useState([...SPORTS]);
+  const [hiddenSports,setHiddenSports]=useState([]);
   const [refundFor,setRefundFor]=useState(null);
+  const [resettleId,setResettleId]=useState(null);
   const [refundAmt,setRefundAmt]=useState("");
   const [cashoutFor,setCashoutFor]=useState(null);
   const [cashoutAmt,setCashoutAmt]=useState("");
@@ -155,22 +156,19 @@ export default function App(){
     if(outcome==="Cashed Out") updated.collectAmount=extra;
     if(outcome==="Pending") delete updated.settledDate;
     const delta=-balanceEffect(current,current.outcome)+balanceEffect(updated,outcome);
-    let nextBets=freshBets.map(b=>b.id===bet.id?updated:b);
-    if(outcome==="Bonus Refund"&&extra>0){
-      nextBets=[...nextBets,{
-        id:`${Date.now()}-refund`,date:new Date().toISOString().slice(0,10),
-        sport:current.sport,market:"Other",bookmaker:current.bookmaker,
-        match:`Bonus bet credit (refund from: ${current.match.slice(0,40)})`,
-        stake:extra,odds:"",myProb:null,outcome:"Pending",
-        notes:"Auto-created from Bonus Refund.",betType:"Regular",isBonus:true,deducted:false,isCredit:true,
-      }];
+    const nextBets=freshBets.map(b=>b.id===bet.id?updated:b);
+    let creditMsg="";
+    if(outcome==="Bonus Refund"&&extra>0&&current.outcome!=="Bonus Refund"){
+      const credit={id:`${Date.now()}-refund`,book:current.bookmaker,amount:extra,source:`Refund: ${(current.match||"").slice(0,40)}`,expiry:"",dateReceived:new Date().toISOString().slice(0,10),status:"available"};
+      persistCredits([...lsGet("credits_v1",credits),credit]);
+      creditMsg=` · $${extra.toFixed(2)} bonus credit added`;
     }
     setBets(nextBets); lsSet("bets_v1",nextBets);
     if(delta!==0){
       const newBal=adjustBalance(current.bookmaker,delta);
-      showToast(`${current.bookmaker} ${delta>=0?"+":""}$${delta.toFixed(2)} → $${newBal.toFixed(2)}`);
-    } else { showToast(`Marked as ${outcome}`); }
-    setRefundFor(null);setRefundAmt("");setCashoutFor(null);setCashoutAmt("");
+      showToast(`${current.bookmaker} ${delta>=0?"+":""}$${delta.toFixed(2)} → $${newBal.toFixed(2)}${creditMsg}`);
+    } else { showToast(`Marked as ${outcome}${creditMsg}`); }
+    setRefundFor(null);setRefundAmt("");setCashoutFor(null);setCashoutAmt("");setResettleId(null);
   }
 
   // Data export/import for carry-over
@@ -259,14 +257,18 @@ export default function App(){
     return{...bk,pl,roi:cost>0?(pl/cost)*100:0,count:bb.length};
   });
 
-  const marketBreakdown=MARKETS.map(m=>{
+  const allSports=Array.from(new Set([...customSports,...bets.map(b=>b.sport).filter(Boolean)]));
+  const allMarkets=Array.from(new Set([...customMarkets,...bets.map(b=>b.market).filter(Boolean)]));
+  const sportColor=(s)=>BOOK_COLORS[Math.max(0,allSports.indexOf(s))%BOOK_COLORS.length];
+
+  const marketBreakdown=allMarkets.map(m=>{
     const mb=settled.filter(b=>b.market===m);
     const pl=parseFloat(mb.reduce((a,b)=>a+betPL(b),0).toFixed(2));
     const cost=mb.reduce((a,b)=>a+betCost(b),0);
     return{market:m==="Same Game Multi"?"SGM":m==="Head-to-Head"?"H2H":m.split("/")[0].split(" ")[0],pl,roi:cost>0?(pl/cost)*100:0,count:mb.length};
   }).filter(m=>m.count>0);
 
-  const sportBreakdown=SPORTS.map(s=>{
+  const sportBreakdown=allSports.map(s=>{
     const sb=settled.filter(b=>b.sport===s);
     if(sb.length===0) return null;
     const pl=sb.reduce((a,b)=>a+betPL(b),0);
@@ -276,7 +278,7 @@ export default function App(){
   }).filter(Boolean);
 
   function marketBreakdownForSport(sport){
-    return MARKETS.map(m=>{
+    return allMarkets.map(m=>{
       const mb=settled.filter(b=>b.sport===sport&&b.market===m);
       const pl=parseFloat(mb.reduce((a,b)=>a+betPL(b),0).toFixed(2));
       const cost=mb.reduce((a,b)=>a+betCost(b),0);
@@ -289,15 +291,15 @@ export default function App(){
       .filter(b=>inTimeFilter(settleDate(b),chartFilter))
       .map(b=>({date:settleDate(b),sport:b.sport,pl:betPL(b)}))
       .sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const running=Object.fromEntries(SPORTS.map(s=>[s,0]));
-    const points=[{date:"Start",...Object.fromEntries(SPORTS.map(s=>[s,0]))}];
+    const running=Object.fromEntries(allSports.map(s=>[s,0]));
+    const points=[{date:"Start",...Object.fromEntries(allSports.map(s=>[s,0]))}];
     events.forEach(e=>{
       running[e.sport]=(running[e.sport]||0)+e.pl;
-      points.push({date:e.date.slice(5),...Object.fromEntries(SPORTS.map(s=>[s,parseFloat(running[s].toFixed(2))]))});
+      points.push({date:e.date.slice(5),...Object.fromEntries(allSports.map(s=>[s,parseFloat(running[s].toFixed(2))]))});
     });
     return points;
   })();
-  const activeSports=SPORTS.filter(s=>settledAll.some(b=>b.sport===s&&inTimeFilter(settleDate(b),chartFilter)));
+  const activeSports=allSports.filter(s=>settledAll.some(b=>b.sport===s&&inTimeFilter(settleDate(b),chartFilter)));
 
   const calibration=(()=>{
     const withProb=settled.filter(b=>b.myProb&&b.outcome!=="Push");
@@ -316,7 +318,7 @@ export default function App(){
     (filterSport==="All"||b.sport===filterSport)&&
     (filterBook==="All"||b.bookmaker===filterBook)&&
     (filterOutcome==="All"||b.outcome===filterOutcome)
-  ).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  ).sort((a,b)=>{const d=new Date(b.date)-new Date(a.date);return d!==0?d:(parseInt(b.id)||0)-(parseInt(a.id)||0);});
 
   const calData=(()=>{
     const map={};
@@ -616,13 +618,13 @@ export default function App(){
               </div>
               {activeSports.length>0&&(
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-                  {activeSports.map(s=>{const col=BOOK_COLORS[SPORTS.indexOf(s)%BOOK_COLORS.length];const on=visibleSports.includes(s);return(
-                    <button key={s} onClick={()=>setVisibleSports(v=>v.includes(s)?v.filter(x=>x!==s):[...v,s])} style={{background:on?col+"22":C.surface,color:on?col:C.text,border:`1px solid ${on?col:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{s}</button>
+                  {activeSports.map(s=>{const col=sportColor(s);const on=!hiddenSports.includes(s);return(
+                    <button key={s} onClick={()=>setHiddenSports(v=>v.includes(s)?v.filter(x=>x!==s):[...v,s])} style={{background:on?col+"22":C.surface,color:on?col:C.text,border:`1px solid ${on?col:C.border}`,borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{s}</button>
                   );})}
                 </div>
               )}
               {sportPLSeries.length>1&&activeSports.length>0?(
-                visibleSports.length>0?(
+                activeSports.some(s=>!hiddenSports.includes(s))?(
                   <ResponsiveContainer width="100%" height={210}>
                     <ComposedChart data={sportPLSeries}>
                       <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
@@ -630,7 +632,7 @@ export default function App(){
                       <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
                       <Legend wrapperStyle={{fontSize:11}}/>
                       <ReferenceLine y={0} stroke={C.border}/>
-                      {activeSports.filter(s=>visibleSports.includes(s)).map(s=>(<Line key={s} type="monotone" dataKey={s} stroke={BOOK_COLORS[SPORTS.indexOf(s)%BOOK_COLORS.length]} strokeWidth={2} strokeDasharray="4 2" dot={false}/>))}
+                      {activeSports.filter(s=>!hiddenSports.includes(s)).map(s=>(<Line key={s} type="monotone" dataKey={s} stroke={sportColor(s)} strokeWidth={2} strokeDasharray="4 2" dot={false}/>))}
                     </ComposedChart>
                   </ResponsiveContainer>
                 ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Toggle a sport above to plot its cumulative P&L.</div>
@@ -973,7 +975,8 @@ export default function App(){
                       </div>
                     </div>
                     <div style={{display:"flex",gap:6,marginTop:8,justifyContent:"flex-end",flexWrap:"wrap",alignItems:"center"}}>
-                      {b.outcome==="Pending"&&<SettleButtons b={b}/>}
+                      {(b.outcome==="Pending"||resettleId===b.id)&&<SettleButtons b={b}/>}
+                      {b.outcome!=="Pending"&&<button onClick={()=>setResettleId(resettleId===b.id?null:b.id)} style={{background:"transparent",color:resettleId===b.id?C.text:C.push,border:`1px solid ${resettleId===b.id?C.border:C.push+"55"}`,borderRadius:5,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>{resettleId===b.id?"Cancel":"Change result"}</button>}
                       <button onClick={()=>editBet(b)} style={{background:"transparent",color:C.accent,border:`1px solid ${C.accent}44`,borderRadius:5,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Edit</button>
                       <button onClick={()=>deleteBet(b.id)} style={{background:"transparent",color:C.loss,border:`1px solid ${C.loss}44`,borderRadius:5,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Delete</button>
                     </div>
@@ -1050,14 +1053,20 @@ export default function App(){
                   const showPL=b.outcome!=="Pending"&&b.outcome!=="Push";
                   const pl=showPL?betPL(b):null;
                   return(
-                  <div key={b.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:`1px solid ${C.border}`,gap:8,flexWrap:"wrap"}}>
-                    <div style={{flex:1,minWidth:150}}>
-                      <div style={{fontSize:13,fontWeight:600}}>{b.match}</div>
-                      <div style={{color:C.muted,fontSize:11}}>{b.bookmaker} · ${parseFloat(b.stake).toFixed(2)} @ {b.odds?parseFloat(b.odds).toFixed(2):"—"} · {b.date}</div>
+                  <div key={b.id} style={{padding:"9px 0",borderTop:`1px solid ${C.border}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <div style={{flex:1,minWidth:150}}>
+                        <div style={{fontSize:13,fontWeight:600}}>{b.match}</div>
+                        <div style={{color:C.muted,fontSize:11}}>{b.bookmaker} · ${parseFloat(b.stake).toFixed(2)} @ {b.odds?parseFloat(b.odds).toFixed(2):"—"} · {b.date}</div>
+                      </div>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <Pill label={b.outcome} color={ocColor(b.outcome)}/>
+                        {pl!==null&&<span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:pl>=0?C.win:C.loss}}>{fmt(pl)}</span>}
+                      </div>
                     </div>
-                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                      <Pill label={b.outcome} color={ocColor(b.outcome)}/>
-                      {pl!==null&&<span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:pl>=0?C.win:C.loss}}>{fmt(pl)}</span>}
+                    <div style={{display:"flex",gap:6,marginTop:8,justifyContent:"flex-end",flexWrap:"wrap",alignItems:"center"}}>
+                      {(b.outcome==="Pending"||resettleId===b.id)&&<SettleButtons b={b}/>}
+                      {b.outcome!=="Pending"&&<button onClick={()=>setResettleId(resettleId===b.id?null:b.id)} style={{background:"transparent",color:resettleId===b.id?C.text:C.push,border:`1px solid ${resettleId===b.id?C.border:C.push+"55"}`,borderRadius:5,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>{resettleId===b.id?"Cancel":"Change result"}</button>}
                     </div>
                   </div>
                   );
