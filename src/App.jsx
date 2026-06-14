@@ -301,6 +301,18 @@ export default function App(){
   })();
   const activeSports=allSports.filter(s=>settledAll.some(b=>b.sport===s&&inTimeFilter(settleDate(b),chartFilter)));
 
+  const overallPLSeries=(()=>{
+    const events=settledAll
+      .filter(b=>inTimeFilter(settleDate(b),chartFilter))
+      .map(b=>({date:settleDate(b),pl:betPL(b)}))
+      .sort((a,b)=>new Date(a.date)-new Date(b.date));
+    let running=0;
+    const points=[{date:"Start",PL:0}];
+    events.forEach(e=>{running+=e.pl;points.push({date:e.date.slice(5),PL:parseFloat(running.toFixed(2))});});
+    return points;
+  })();
+  const overallPLFinal=overallPLSeries[overallPLSeries.length-1]?.PL||0;
+
   const calibration=(()=>{
     const withProb=settled.filter(b=>b.myProb&&b.outcome!=="Push");
     if(withProb.length<3) return[];
@@ -362,20 +374,26 @@ export default function App(){
     if(!form.match||!form.stake||!form.odds){showToast("Match, stake, and odds are required");return;}
     const isFT=form.betType==="Future"||form.betType==="Multi";
     const creditId=form._creditId;
+    const wasEdit=!!editId;
     const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(bets.find(b=>b.id===editId)?.deducted??false):(isFT&&!form.isBonus)};
     delete bet._creditId;
+    if(!wasEdit&&bet.outcome!=="Pending") bet.settledDate=new Date().toISOString().slice(0,10);
     const next=editId?bets.map(b=>b.id===editId?bet:b):[...bets,bet];
-    const wasEdit=!!editId;
     if(editId) setEditId(null);
     persistBets(next);
     if(!wasEdit&&creditId&&bet.isBonus){
       const nc=lsGet("credits_v1",credits).map(c=>c.id===creditId?{...c,status:"used",usedBetId:bet.id,usedDate:new Date().toISOString().slice(0,10)}:c);
       persistCredits(nc);
     }
-    if(!wasEdit&&isFT&&!bet.isBonus){
-      const newBal=adjustBalance(bet.bookmaker,-bet.stake);
-      showToast(`${bet.betType} logged. ${bet.bookmaker} -$${bet.stake.toFixed(2)} → $${newBal.toFixed(2)}`);
-    } else { showToast(wasEdit?"Bet updated":"Bet logged"); }
+    if(!wasEdit){
+      let delta=0;
+      if(isFT&&!bet.isBonus) delta-=bet.stake;
+      if(bet.outcome!=="Pending") delta+=balanceEffect(bet,bet.outcome);
+      if(delta!==0){
+        const newBal=adjustBalance(bet.bookmaker,delta);
+        showToast(`${bet.bookmaker} ${delta>=0?"+":""}$${delta.toFixed(2)} → $${newBal.toFixed(2)}`);
+      } else { showToast("Bet logged"); }
+    } else { showToast("Bet updated"); }
     setForm(emptyForm); setTab("log");
   }
 
@@ -572,6 +590,31 @@ export default function App(){
               <StatCard label="Net P&L" value={fmt(totalPL)} color={totalPL>=0?C.win:C.loss} sub={timeFilter}/>
               <StatCard label="Cash at Risk" value={fmtAbs(cashAtRisk)} color={C.pending} sub={`${pendingAll.length} pending`}/>
               <StatCard label="Bonus In Play" value={fmtAbs(bonusHeld)} color={C.bonus} sub="on pending bets"/>
+            </div>
+
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,gap:8,flexWrap:"wrap"}}>
+                <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>Overall P&L</div>
+                <select value={chartFilter} onChange={e=>setChartFilter(e.target.value)} style={{background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{TIME_FILTERS.map(f=><option key={f} value={f}>{f}</option>)}</select>
+              </div>
+              <div style={{color:C.muted,fontSize:11,marginBottom:12}}>Betting profit only — excludes deposits & withdrawals.</div>
+              {overallPLSeries.length>1?(
+                <ResponsiveContainer width="100%" height={210}>
+                  <ComposedChart data={overallPLSeries}>
+                    <defs>
+                      <linearGradient id="overallPLGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={overallPLFinal>=0?C.win:C.loss} stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor={overallPLFinal>=0?C.win:C.loss} stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
+                    <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={v=>[`$${v.toFixed(2)}`,"Net P&L"]}/>
+                    <ReferenceLine y={0} stroke={C.border}/>
+                    <Area type="monotone" dataKey="PL" stroke={overallPLFinal>=0?C.win:C.loss} strokeWidth={3} fill="url(#overallPLGrad)" dot={false}/>
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Settle bets to see your cumulative profit.</div>}
             </div>
 
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
