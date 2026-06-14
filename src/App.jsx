@@ -520,6 +520,8 @@ export default function App(){
   if(!loaded) return <div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontFamily:"system-ui"}}>Loading...</div>;
 
   const liveEV=form.myProb&&form.odds?(parseFloat(form.myProb)/100)*parseFloat(form.odds)-1:null;
+  const potProfit=form.stake&&form.odds?parseFloat(form.stake)*(parseFloat(form.odds)-1):null;
+  const potReturn=form.stake&&form.odds?(form.isBonus?parseFloat(form.stake)*(parseFloat(form.odds)-1):parseFloat(form.stake)*parseFloat(form.odds)):null;
   const monthName=new Date(calMonth.y,calMonth.m).toLocaleString("en-AU",{month:"long",year:"numeric"});
 
   return(
@@ -966,6 +968,12 @@ export default function App(){
     <div style={{gridColumn:"1/-1"}}><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Notes</div><textarea value={form.notes} onChange={e=>hfc("notes",e.target.value)} rows={2} style={{...iStyle,resize:"vertical"}}/></div>
   </>
 )}
+              {potReturn!==null&&(
+                <div style={{gridColumn:"1/-1",background:C.win+"11",border:`1px solid ${C.win}33`,borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                  <span style={{color:C.muted,fontSize:11,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:600}}>If it wins</span>
+                  <span style={{fontSize:14,fontWeight:700,fontFamily:"monospace",color:C.win}}>{form.isBonus?`+$${potProfit.toFixed(2)} winnings`:`$${potReturn.toFixed(2)} back · +$${potProfit.toFixed(2)} profit`}</span>
+                </div>
+              )}
               {liveEV!==null&&<div style={{gridColumn:"1/-1",fontSize:13}}>EV: <span style={{color:evColor(liveEV),fontWeight:700,fontFamily:"monospace"}}>{(liveEV*100).toFixed(2)}%</span></div>}
             </div>
             <div style={{display:"flex",gap:10,marginTop:18}}>
