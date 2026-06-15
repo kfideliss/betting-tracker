@@ -384,10 +384,9 @@ export default function App(){
 
   function submitBet(){
     if(!form.match||!form.stake||!form.odds){showToast("Match, stake, and odds are required");return;}
-    const isFT=form.betType==="Future"||form.betType==="Multi";
     const creditId=form._creditId;
     const wasEdit=!!editId;
-    const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(bets.find(b=>b.id===editId)?.deducted??false):(isFT&&!form.isBonus)};
+    const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(bets.find(b=>b.id===editId)?.deducted??false):(!form.isBonus)};
     delete bet._creditId;
     if(!wasEdit&&bet.outcome!=="Pending") bet.settledDate=todayLocal();
     const next=editId?bets.map(b=>b.id===editId?bet:b):[...bets,bet];
@@ -399,7 +398,7 @@ export default function App(){
     }
     if(!wasEdit){
       let delta=0;
-      if(isFT&&!bet.isBonus) delta-=bet.stake;
+      if(!bet.isBonus) delta-=bet.stake;
       if(bet.outcome!=="Pending") delta+=balanceEffect(bet,bet.outcome);
       if(delta!==0){
         const newBal=adjustBalance(bet.bookmaker,delta);
@@ -965,7 +964,7 @@ export default function App(){
               <div>
                 <div style={{color:C.muted,fontSize:11,marginBottom:5}}>Bet Type</div>
                 <select value={form.betType} onChange={e=>setBetType(e.target.value)} style={iStyle}>{BET_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select>
-                {(form.betType==="Future"||form.betType==="Multi")&&!form.isBonus&&<div style={{color:C.future,fontSize:10,marginTop:4}}>Stake deducts from balance immediately</div>}
+                {!form.isBonus&&<div style={{color:C.future,fontSize:10,marginTop:4}}>Stake deducts from balance when placed</div>}
               </div>
               <div style={{display:"flex",alignItems:"center",paddingTop:isMobile?0:20}}>
                 <button onClick={()=>hfc("isBonus",!form.isBonus)} style={{background:form.isBonus?C.bonus+"33":C.surface,color:form.isBonus?C.bonus:C.muted,border:`1px solid ${form.isBonus?C.bonus:C.border}`,borderRadius:7,padding:"9px 14px",fontSize:12,fontWeight:700,cursor:"pointer",width:"100%"}}>{form.isBonus?"✓ Bonus Bet":"Bonus Bet / Credit"}</button>
