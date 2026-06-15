@@ -206,9 +206,11 @@ export default function App(){
   const pendingAll=bets.filter(b=>b.outcome==="Pending");
   const pendingRegular=pendingAll.filter(b=>(b.betType==="Regular"||b.betType==="Multi"||b.betType==="Live")&&!b.deferred);
   const pendingFutures=pendingAll.filter(b=>b.betType==="Future"||b.deferred);
-  const totalPL=settled.reduce((acc,b)=>acc+betPL(b),0);
+  const betsTotalPL=settled.reduce((acc,b)=>acc+betPL(b),0);
+  const plAdjustTotal=books.reduce((a,bk)=>a+(bk.plAdjust||0),0);
+  const totalPL=betsTotalPL+plAdjustTotal;
   const totalCost=settled.reduce((acc,b)=>acc+betCost(b),0);
-  const roi=totalCost>0?(totalPL/totalCost)*100:0;
+  const roi=totalCost>0?(betsTotalPL/totalCost)*100:0;
   const winRate=settled.length>0?(wins.length/settled.length)*100:0;
   const totalBankroll=books.reduce((a,b)=>a+b.balance,0);
   const evBets=bets.filter(b=>b.myProb&&b.odds);
@@ -253,9 +255,10 @@ export default function App(){
 
   const bookStats=books.map(bk=>{
     const bb=settled.filter(b=>b.bookmaker===bk.name);
-    const pl=bb.reduce((acc,b)=>acc+betPL(b),0);
+    const betsPl=bb.reduce((acc,b)=>acc+betPL(b),0);
     const cost=bb.reduce((acc,b)=>acc+betCost(b),0);
-    return{...bk,pl,roi:cost>0?(pl/cost)*100:0,count:bb.length};
+    const pl=betsPl+(bk.plAdjust||0);
+    return{...bk,pl,roi:cost>0?(betsPl/cost)*100:0,count:bb.length};
   });
 
   const otherLast=(arr)=>[...arr.filter(x=>x!=="Other"),...arr.filter(x=>x==="Other")];
@@ -439,8 +442,17 @@ export default function App(){
     persistBooks(books.filter(b=>b.name!==name));showToast(`${name} removed`);
   }
   function saveBalEdit(name){
-    const next=books.map(b=>b.name===name?{...b,balance:parseFloat(balEditVal)||b.balance}:b);
-    persistBooks(next);setBalEdit(null);setBalEditVal("");showToast("Balance updated");
+    const nv=parseFloat(balEditVal);
+    if(isNaN(nv)){setBalEdit(null);setBalEditVal("");return;}
+    let msgDelta=0;
+    const next=books.map(b=>{
+      if(b.name!==name) return b;
+      const delta=parseFloat((nv-b.balance).toFixed(2));
+      msgDelta=delta;
+      return{...b,balance:nv,plAdjust:parseFloat(((b.plAdjust||0)+delta).toFixed(2))};
+    });
+    persistBooks(next);setBalEdit(null);setBalEditVal("");
+    showToast(msgDelta!==0?`Balance updated · P&L ${msgDelta>=0?"+":""}$${msgDelta.toFixed(2)}`:"Balance updated");
   }
   function addTxn(){
     if(!txnForm.amount||parseFloat(txnForm.amount)<=0){showToast("Enter an amount");return;}
