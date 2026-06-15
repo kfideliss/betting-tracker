@@ -257,8 +257,11 @@ export default function App(){
     return{...bk,pl,roi:cost>0?(pl/cost)*100:0,count:bb.length};
   });
 
-  const allSports=Array.from(new Set([...customSports,...bets.map(b=>b.sport).filter(Boolean)]));
-  const allMarkets=Array.from(new Set([...customMarkets,...bets.map(b=>b.market).filter(Boolean)]));
+  const otherLast=(arr)=>[...arr.filter(x=>x!=="Other"),...arr.filter(x=>x==="Other")];
+  const allSports=otherLast(Array.from(new Set([...customSports,...bets.map(b=>b.sport).filter(Boolean)])));
+  const allMarkets=otherLast(Array.from(new Set([...customMarkets,...bets.map(b=>b.market).filter(Boolean)])));
+  const sportsOrdered=otherLast(customSports);
+  const marketsOrdered=otherLast(customMarkets);
   const sportColor=(s)=>BOOK_COLORS[Math.max(0,allSports.indexOf(s))%BOOK_COLORS.length];
 
   const marketBreakdown=allMarkets.map(m=>{
@@ -369,6 +372,14 @@ export default function App(){
   }
 
   function hfc(k,v){setForm(f=>({...f,[k]:v}));}
+  function setBetType(v){
+    setForm(f=>{
+      let market=f.market;
+      if(v==="Future") market="Futures Market";
+      else if(v==="Multi"&&!["Same Game Multi","Multi-leg"].includes(f.market)) market="Same Game Multi";
+      return{...f,betType:v,market};
+    });
+  }
 
   function submitBet(){
     if(!form.match||!form.stake||!form.odds){showToast("Match, stake, and odds are required");return;}
@@ -948,18 +959,18 @@ export default function App(){
               </div>
               <div>
                 <div style={{color:C.muted,fontSize:11,marginBottom:5}}>Sport</div>
-                <select value={form.sport} onChange={e=>hfc("sport",e.target.value)} style={iStyle}>{customSports.map(o=><option key={o} value={o}>{o}</option>)}</select>
+                <select value={form.sport} onChange={e=>hfc("sport",e.target.value)} style={iStyle}>{sportsOrdered.map(o=><option key={o} value={o}>{o}</option>)}</select>
               </div>
               <div>
                 <div style={{color:C.muted,fontSize:11,marginBottom:5}}>Bet Type</div>
-                <select value={form.betType} onChange={e=>hfc("betType",e.target.value)} style={iStyle}>{BET_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select>
+                <select value={form.betType} onChange={e=>setBetType(e.target.value)} style={iStyle}>{BET_TYPES.map(o=><option key={o} value={o}>{o}</option>)}</select>
                 {(form.betType==="Future"||form.betType==="Multi")&&!form.isBonus&&<div style={{color:C.future,fontSize:10,marginTop:4}}>Stake deducts from balance immediately</div>}
               </div>
               <div style={{display:"flex",alignItems:"center",paddingTop:isMobile?0:20}}>
                 <button onClick={()=>hfc("isBonus",!form.isBonus)} style={{background:form.isBonus?C.bonus+"33":C.surface,color:form.isBonus?C.bonus:C.muted,border:`1px solid ${form.isBonus?C.bonus:C.border}`,borderRadius:7,padding:"9px 14px",fontSize:12,fontWeight:700,cursor:"pointer",width:"100%"}}>{form.isBonus?"✓ Bonus Bet":"Bonus Bet / Credit"}</button>
               </div>
               {form.isBonus&&<div style={{gridColumn:"1/-1",color:C.bonus,fontSize:11,background:C.bonus+"11",border:`1px solid ${C.bonus}33`,borderRadius:7,padding:"8px 12px"}}>Bonus bet: $0 cost basis, no balance deduction, win pays winnings only.</div>}
-              <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Market</div><select value={form.market} onChange={e=>hfc("market",e.target.value)} style={iStyle}>{customMarkets.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+              <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Market</div><select value={form.market} onChange={e=>hfc("market",e.target.value)} disabled={form.betType==="Future"} style={{...iStyle,opacity:form.betType==="Future"?0.7:1}}>{(form.betType==="Future"?["Futures Market"]:form.betType==="Multi"?["Same Game Multi","Multi-leg"]:marketsOrdered).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
 {!quickMode&&(
   <>
     <div><div style={{color:C.muted,fontSize:11,marginBottom:5}}>Date</div><input type="date" value={form.date} onChange={e=>hfc("date",e.target.value)} style={iStyle}/></div>
@@ -986,7 +997,7 @@ export default function App(){
         {tab==="log"&&(
           <div>
             <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-              {[["Sport",filterSport,setFilterSport,["All",...customSports]],["Book",filterBook,setFilterBook,["All",...bookNames]],["Status",filterOutcome,setFilterOutcome,["All",...OUTCOMES]]].map(([label,val,setter,opts])=>(
+              {[["Sport",filterSport,setFilterSport,["All",...sportsOrdered]],["Book",filterBook,setFilterBook,["All",...bookNames]],["Status",filterOutcome,setFilterOutcome,["All",...OUTCOMES]]].map(([label,val,setter,opts])=>(
                 <select key={label} value={val} onChange={e=>setter(e.target.value)} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 10px",color:C.text,fontSize:12}}>
                   {opts.map(o=><option key={o} value={o}>{o==="All"?`${label}: All`:o}</option>)}
                 </select>
@@ -1018,6 +1029,7 @@ export default function App(){
                       </div>
                       <div style={{textAlign:"right"}}>
                         <div style={{fontFamily:"monospace",fontSize:13}}>${parseFloat(b.stake).toFixed(2)} @ {b.odds?parseFloat(b.odds).toFixed(2):"—"}</div>
+                        {b.outcome==="Pending"&&b.odds&&<div style={{color:C.win,fontSize:10,fontFamily:"monospace"}}>→ ${(b.isBonus?parseFloat(b.stake)*(parseFloat(b.odds)-1):parseFloat(b.stake)*parseFloat(b.odds)).toFixed(2)} if win</div>}
                         {ev!==null&&<div style={{color:evColor(ev),fontSize:10}}>EV {(ev*100).toFixed(1)}%</div>}
                         {pl!==null&&<div style={{color:pl>=0?C.win:C.loss,fontSize:12,fontWeight:700,fontFamily:"monospace"}}>{fmt(pl)}</div>}
                         {b.outcome==="Cashed Out"&&b.collectAmount!==undefined&&<div style={{color:C.cashout,fontSize:10}}>collected ${parseFloat(b.collectAmount).toFixed(2)}</div>}
