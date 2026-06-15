@@ -21,6 +21,7 @@ const DEFAULT_BOOKS = [
   { name:"Bet365", balance:54.50, color:"#00a651" },
 ];
 
+function todayLocal(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function daysUntil(dateStr){ if(!dateStr) return null; const d=new Date(dateStr+"T00:00:00"); const n=new Date(); n.setHours(0,0,0,0); return Math.round((d-n)/86400000); }
 function fmt(n){ return n>=0?`+$${n.toFixed(2)}`:`-$${Math.abs(n).toFixed(2)}`; }
 function fmtAbs(n){ return `$${Math.abs(n).toFixed(2)}`; }
@@ -80,7 +81,7 @@ export default function App(){
   const [chartFilter,setChartFilter]=useState("All Time");
   const [aiSummary,setAiSummary]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
-  const emptyForm={date:new Date().toISOString().slice(0,10),sport:"AFL",market:"Head-to-Head",bookmaker:"TAB",match:"",stake:"",odds:"",myProb:"",outcome:"Pending",notes:"",betType:"Regular",isBonus:false};
+  const emptyForm={date:todayLocal(),sport:"AFL",market:"Head-to-Head",bookmaker:"TAB",match:"",stake:"",odds:"",myProb:"",outcome:"Pending",notes:"",betType:"Regular",isBonus:false};
   const [form,setForm]=useState(emptyForm);
   const [quickMode,setQuickMode]=useState(true);
   const [editId,setEditId]=useState(null);
@@ -101,7 +102,7 @@ export default function App(){
   const [cashoutAmt,setCashoutAmt]=useState("");
   const [newBookName,setNewBookName]=useState("");
   const [newBookBal,setNewBookBal]=useState("");
-  const [txnForm,setTxnForm]=useState({book:"TAB",type:"deposit",amount:"",date:new Date().toISOString().slice(0,10),notes:""});
+  const [txnForm,setTxnForm]=useState({book:"TAB",type:"deposit",amount:"",date:todayLocal(),notes:""});
   const [balEdit,setBalEdit]=useState(null);
   const [balEditVal,setBalEditVal]=useState("");
   const [calMonth,setCalMonth]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
@@ -151,7 +152,7 @@ export default function App(){
     const freshBets=lsGet("bets_v1",[]);
     const current=freshBets.find(b=>b.id===bet.id);
     if(!current) return;
-    const updated={...current,outcome,settledDate:new Date().toISOString().slice(0,10)};
+    const updated={...current,outcome,settledDate:todayLocal()};
     if(outcome==="Bonus Refund") updated.refundAmount=extra;
     if(outcome==="Cashed Out") updated.collectAmount=extra;
     if(outcome==="Pending") delete updated.settledDate;
@@ -159,7 +160,7 @@ export default function App(){
     const nextBets=freshBets.map(b=>b.id===bet.id?updated:b);
     let creditMsg="";
     if(outcome==="Bonus Refund"&&extra>0&&current.outcome!=="Bonus Refund"){
-      const credit={id:`${Date.now()}-refund`,book:current.bookmaker,amount:extra,source:`Refund: ${(current.match||"").slice(0,40)}`,expiry:"",dateReceived:new Date().toISOString().slice(0,10),status:"available"};
+      const credit={id:`${Date.now()}-refund`,book:current.bookmaker,amount:extra,source:`Refund: ${(current.match||"").slice(0,40)}`,expiry:"",dateReceived:todayLocal(),status:"available"};
       persistCredits([...lsGet("credits_v1",credits),credit]);
       creditMsg=` · $${extra.toFixed(2)} bonus credit added`;
     }
@@ -177,7 +178,7 @@ export default function App(){
     const blob=new Blob([data],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
-    a.href=url; a.download=`edge-backup-${new Date().toISOString().slice(0,10)}.json`; a.click();
+    a.href=url; a.download=`edge-backup-${todayLocal()}.json`; a.click();
     URL.revokeObjectURL(url);
     showToast("Backup downloaded");
   }
@@ -217,7 +218,7 @@ export default function App(){
   const futuresExposure=pendingFutures.reduce((a,b)=>a+(b.isBonus?0:parseFloat(b.stake||0)),0);
   const futuresPotential=pendingFutures.reduce((a,b)=>a+(b.odds?parseFloat(b.stake)*parseFloat(b.odds):0),0);
 
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=todayLocal();
   const creditsAvailable=credits.filter(c=>c.status!=="used"&&(!c.expiry||c.expiry>=todayStr)).sort((a,b)=>(a.expiry||"9999").localeCompare(b.expiry||"9999"));
   const creditsExpired=credits.filter(c=>c.status!=="used"&&c.expiry&&c.expiry<todayStr);
   const creditAvailValue=creditsAvailable.reduce((a,c)=>a+parseFloat(c.amount||0),0);
@@ -366,7 +367,7 @@ export default function App(){
     const blob=new Blob([csv],{type:"text/csv"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
-    a.href=url;a.download=`betting-log-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+    a.href=url;a.download=`betting-log-${todayLocal()}.csv`;a.click();
     URL.revokeObjectURL(url);
     showToast("CSV downloaded");
   }
@@ -388,12 +389,12 @@ export default function App(){
     const wasEdit=!!editId;
     const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(bets.find(b=>b.id===editId)?.deducted??false):(isFT&&!form.isBonus)};
     delete bet._creditId;
-    if(!wasEdit&&bet.outcome!=="Pending") bet.settledDate=new Date().toISOString().slice(0,10);
+    if(!wasEdit&&bet.outcome!=="Pending") bet.settledDate=todayLocal();
     const next=editId?bets.map(b=>b.id===editId?bet:b):[...bets,bet];
     if(editId) setEditId(null);
     persistBets(next);
     if(!wasEdit&&creditId&&bet.isBonus){
-      const nc=lsGet("credits_v1",credits).map(c=>c.id===creditId?{...c,status:"used",usedBetId:bet.id,usedDate:new Date().toISOString().slice(0,10)}:c);
+      const nc=lsGet("credits_v1",credits).map(c=>c.id===creditId?{...c,status:"used",usedBetId:bet.id,usedDate:todayLocal()}:c);
       persistCredits(nc);
     }
     if(!wasEdit){
@@ -445,7 +446,7 @@ export default function App(){
 
   function addCredit(){
     if(!creditForm.amount||parseFloat(creditForm.amount)<=0){showToast("Enter a credit amount");return;}
-    const c={id:Date.now().toString(),book:creditForm.book||bookNames[0],amount:parseFloat(creditForm.amount),source:creditForm.source.trim(),expiry:creditForm.expiry||"",dateReceived:new Date().toISOString().slice(0,10),status:"available"};
+    const c={id:Date.now().toString(),book:creditForm.book||bookNames[0],amount:parseFloat(creditForm.amount),source:creditForm.source.trim(),expiry:creditForm.expiry||"",dateReceived:todayLocal(),status:"available"};
     persistCredits([...credits,c]);
     setCreditForm({book:creditForm.book,amount:"",source:"",expiry:""});
     showToast("Bonus credit added");
