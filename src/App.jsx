@@ -412,7 +412,21 @@ export default function App(){
     setForm({...b,stake:b.stake.toString(),odds:b.odds?b.odds.toString():"",myProb:b.myProb?b.myProb.toString():"",notes:b.notes||"",betType:b.betType||"Regular",isBonus:!!b.isBonus});
     setEditId(b.id);setQuickMode(false);setTab("add");
   }
-  function deleteBet(id){persistBets(bets.filter(b=>b.id!==id));showToast("Bet deleted");}
+  function deleteBet(id){
+    const b=bets.find(x=>x.id===id);
+    persistBets(bets.filter(x=>x.id!==id));
+    if(b){
+      let effect=0;
+      if(b.deducted&&!b.isBonus) effect-=parseFloat(b.stake||0);
+      if(b.outcome!=="Pending") effect+=balanceEffect(b,b.outcome);
+      if(effect!==0){
+        const newBal=adjustBalance(b.bookmaker,-effect);
+        showToast(`Bet deleted · ${b.bookmaker} ${-effect>=0?"+":""}$${(-effect).toFixed(2)} → $${newBal.toFixed(2)}`);
+        return;
+      }
+    }
+    showToast("Bet deleted");
+  }
 
   function addBook(){
     const name=newBookName.trim();
