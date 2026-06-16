@@ -211,7 +211,8 @@ export default function App(){
   const totalPL=betsTotalPL+plAdjustTotal;
   const totalCost=settled.reduce((acc,b)=>acc+betCost(b),0);
   const roi=totalCost>0?(betsTotalPL/totalCost)*100:0;
-  const winRate=settled.length>0?(wins.length/settled.length)*100:0;
+  const decisive=settled.filter(b=>b.outcome!=="Push");
+  const winRate=decisive.length>0?(wins.length/decisive.length)*100:0;
   const totalBankroll=books.reduce((a,b)=>a+b.balance,0);
   const evBets=bets.filter(b=>b.myProb&&b.odds);
   const avgEV=evBets.length>0?evBets.reduce((acc,b)=>acc+((parseFloat(b.myProb)/100)*parseFloat(b.odds)-1),0)/evBets.length:null;
@@ -281,7 +282,8 @@ export default function App(){
     const pl=sb.reduce((a,b)=>a+betPL(b),0);
     const cost=sb.reduce((a,b)=>a+betCost(b),0);
     const w=sb.filter(b=>b.outcome==="Win").length;
-    return{sport:s,pl:parseFloat(pl.toFixed(2)),roi:cost>0?(pl/cost)*100:0,strike:(w/sb.length)*100,count:sb.length};
+    const decisiveN=sb.filter(b=>b.outcome!=="Push").length;
+    return{sport:s,pl:parseFloat(pl.toFixed(2)),roi:cost>0?(pl/cost)*100:0,strike:decisiveN>0?(w/decisiveN)*100:0,count:sb.length};
   }).filter(Boolean);
 
   function marketBreakdownForSport(sport){
