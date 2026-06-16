@@ -250,14 +250,16 @@ export default function App(){
     const start={};
     books.forEach(bk=>{const s=filtered.filter(e=>e.book===bk.name).reduce((a,e)=>a+e.delta,0);start[bk.name]=bk.balance-s;});
     const running={...start};
-    const points=[{date:"Start",...Object.fromEntries(books.map(bk=>[bk.name,parseFloat(running[bk.name].toFixed(2))])),Combined:parseFloat(Object.values(running).reduce((a,v)=>a+v,0).toFixed(2))}];
+    const snap=()=>({...Object.fromEntries(books.map(bk=>[bk.name,parseFloat((running[bk.name]||0).toFixed(2))])),Combined:parseFloat(Object.values(running).reduce((a,v)=>a+v,0).toFixed(2))});
+    const points=[{date:"Start",...snap()}];
+    const byDate=new Map();
     const txnMarkers=[];
     filtered.forEach(e=>{
       running[e.book]=(running[e.book]||0)+e.delta;
-      const pt={date:e.date.slice(5),...Object.fromEntries(books.map(bk=>[bk.name,parseFloat((running[bk.name]||0).toFixed(2))])),Combined:parseFloat(Object.values(running).reduce((a,v)=>a+v,0).toFixed(2))};
-      points.push(pt);
+      byDate.set(e.date,{date:e.date,...snap()});
       if(e.kind==="deposit"||e.kind==="withdrawal") txnMarkers.push({kind:e.kind,date:e.date.slice(5)});
     });
+    byDate.forEach(pt=>points.push(pt));
     return{points,txnMarkers};
   })();
 
@@ -308,11 +310,13 @@ export default function App(){
       .map(b=>({date:settleDate(b),sport:b.sport,pl:betPL(b)}))
       .sort((a,b)=>new Date(a.date)-new Date(b.date));
     const running=Object.fromEntries(allSports.map(s=>[s,0]));
-    const points=[{date:"Start",...Object.fromEntries(allSports.map(s=>[s,0]))}];
+    const byDate=new Map();
     events.forEach(e=>{
       running[e.sport]=(running[e.sport]||0)+e.pl;
-      points.push({date:e.date.slice(5),...Object.fromEntries(allSports.map(s=>[s,parseFloat(running[s].toFixed(2))]))});
+      byDate.set(e.date,{date:e.date,...Object.fromEntries(allSports.map(s=>[s,parseFloat(running[s].toFixed(2))]))});
     });
+    const points=[{date:"Start",...Object.fromEntries(allSports.map(s=>[s,0]))}];
+    byDate.forEach(pt=>points.push(pt));
     return points;
   })();
   const activeSports=allSports.filter(s=>settledAll.some(b=>b.sport===s&&inTimeFilter(settleDate(b),chartFilter)));
@@ -323,8 +327,10 @@ export default function App(){
       .map(b=>({date:settleDate(b),pl:betPL(b)}))
       .sort((a,b)=>new Date(a.date)-new Date(b.date));
     let running=0;
+    const byDate=new Map();
+    events.forEach(e=>{running+=e.pl;byDate.set(e.date,parseFloat(running.toFixed(2)));});
     const points=[{date:"Start",PL:0}];
-    events.forEach(e=>{running+=e.pl;points.push({date:e.date.slice(5),PL:parseFloat(running.toFixed(2))});});
+    byDate.forEach((PL,date)=>points.push({date,PL}));
     return points;
   })();
   const overallPLFinal=overallPLSeries[overallPLSeries.length-1]?.PL||0;
@@ -657,11 +663,11 @@ export default function App(){
                         <stop offset="95%" stopColor={overallPLFinal>=0?C.win:C.loss} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} tickFormatter={d=>d==="Start"?d:d.slice(5)}/>
                     <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
                     <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={v=>[`$${v.toFixed(2)}`,"Net P&L"]}/>
                     <ReferenceLine y={0} stroke={C.border}/>
-                    <Area type="monotone" dataKey="PL" stroke={overallPLFinal>=0?C.win:C.loss} strokeWidth={3} fill="url(#overallPLGrad)" dot={false}/>
+                    <Area type="linear" dataKey="PL" stroke={overallPLFinal>=0?C.win:C.loss} strokeWidth={3} fill="url(#overallPLGrad)" dot={false}/>
                   </ComposedChart>
                 </ResponsiveContainer>
               ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Settle bets to see your cumulative profit.</div>}
@@ -688,12 +694,12 @@ export default function App(){
                         <stop offset="95%" stopColor={C.combined} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} tickFormatter={d=>d==="Start"?d:d.slice(5)}/>
                     <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
                     <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
                     <Legend wrapperStyle={{fontSize:11}}/>
-                    <Area type="monotone" dataKey="Combined" stroke={C.combined} strokeWidth={3} fill="url(#combinedGrad)" dot={false}/>
-                    {books.filter(bk=>visibleBooks.includes(bk.name)).map(bk=>(<Line key={bk.name} type="monotone" dataKey={bk.name} stroke={bk.color} strokeWidth={1.5} strokeDasharray="4 2" dot={false}/>))}
+                    <Area type="linear" dataKey="Combined" stroke={C.combined} strokeWidth={3} fill="url(#combinedGrad)" dot={false}/>
+                    {books.filter(bk=>visibleBooks.includes(bk.name)).map(bk=>(<Line key={bk.name} type="linear" dataKey={bk.name} stroke={bk.color} strokeWidth={1.5} strokeDasharray="4 2" dot={false}/>))}
                   </ComposedChart>
                 </ResponsiveContainer>
               ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Settle bets or log transactions to see your curve.</div>}
@@ -720,12 +726,12 @@ export default function App(){
                 activeSports.some(s=>!hiddenSports.includes(s))?(
                   <ResponsiveContainer width="100%" height={210}>
                     <ComposedChart data={sportPLSeries}>
-                      <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false}/>
+                      <XAxis dataKey="date" tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} tickFormatter={d=>d==="Start"?d:d.slice(5)}/>
                       <YAxis tick={{fill:C.muted,fontSize:10}} axisLine={false} tickLine={false} domain={["auto","auto"]} width={55} tickFormatter={v=>`$${v}`}/>
                       <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}} formatter={(v,name)=>[`$${v.toFixed(2)}`,name]}/>
                       <Legend wrapperStyle={{fontSize:11}}/>
                       <ReferenceLine y={0} stroke={C.border}/>
-                      {activeSports.filter(s=>!hiddenSports.includes(s)).map(s=>(<Line key={s} type="monotone" dataKey={s} stroke={sportColor(s)} strokeWidth={2} strokeDasharray="4 2" dot={false}/>))}
+                      {activeSports.filter(s=>!hiddenSports.includes(s)).map(s=>(<Line key={s} type="linear" dataKey={s} stroke={sportColor(s)} strokeWidth={2} strokeDasharray="4 2" dot={false}/>))}
                     </ComposedChart>
                   </ResponsiveContainer>
                 ):<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"30px 0"}}>Toggle a sport above to plot its cumulative P&L.</div>
