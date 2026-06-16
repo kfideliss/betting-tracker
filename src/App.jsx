@@ -212,7 +212,7 @@ export default function App(){
   const pendingFutures=pendingAll.filter(b=>b.betType==="Future"||b.deferred);
   const betsTotalPL=settled.reduce((acc,b)=>acc+betPL(b),0);
   const plAdjustTotal=books.reduce((a,bk)=>a+(bk.plAdjust||0),0);
-  const totalPL=betsTotalPL+plAdjustTotal;
+  const totalPL=betsTotalPL+(timeFilter==="All Time"?plAdjustTotal:0);
   const totalCost=settled.reduce((acc,b)=>acc+betCost(b),0);
   const roi=totalCost>0?(betsTotalPL/totalCost)*100:0;
   const decisive=settled.filter(b=>b.outcome!=="Push");
@@ -241,7 +241,10 @@ export default function App(){
 
   const bankrollSeries=(()=>{
     const events=[];
-    settledAll.forEach(b=>events.push({date:settleDate(b),book:b.bookmaker,delta:balanceEffect(b,b.outcome),kind:"bet"}));
+    bets.forEach(b=>{
+      if(b.deducted&&!b.isBonus) events.push({date:b.date,book:b.bookmaker,delta:-parseFloat(b.stake||0),kind:"stake"});
+      if(b.outcome!=="Pending") events.push({date:settleDate(b),book:b.bookmaker,delta:balanceEffect(b,b.outcome),kind:"bet"});
+    });
     txns.forEach(t=>events.push({date:t.date,book:t.book,delta:t.type==="deposit"?parseFloat(t.amount):-parseFloat(t.amount),kind:t.type}));
     const filtered=events.filter(e=>inTimeFilter(e.date,chartFilter)).sort((a,b)=>new Date(a.date)-new Date(b.date));
     const start={};
@@ -262,7 +265,7 @@ export default function App(){
     const bb=settled.filter(b=>b.bookmaker===bk.name);
     const betsPl=bb.reduce((acc,b)=>acc+betPL(b),0);
     const cost=bb.reduce((acc,b)=>acc+betCost(b),0);
-    const pl=betsPl+(bk.plAdjust||0);
+    const pl=betsPl+(timeFilter==="All Time"?(bk.plAdjust||0):0);
     return{...bk,pl,roi:cost>0?(betsPl/cost)*100:0,count:bb.length};
   });
 
