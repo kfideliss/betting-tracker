@@ -109,6 +109,8 @@ export default function App(){
   const [txnForm,setTxnForm]=useState({book:"TAB",type:"deposit",amount:"",date:todayLocal(),notes:""});
   const [balEdit,setBalEdit]=useState(null);
   const [balEditVal,setBalEditVal]=useState("");
+  const [plEdit,setPlEdit]=useState(null);
+  const [plEditVal,setPlEditVal]=useState("");
   const [calMonth,setCalMonth]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
   const [calDay,setCalDay]=useState(null);
   const [customSports,setCustomSports]=useState(SPORTS);
@@ -212,7 +214,8 @@ export default function App(){
   const pendingFutures=pendingAll.filter(b=>b.betType==="Future"||b.deferred);
   const betsTotalPL=settled.reduce((acc,b)=>acc+betPL(b),0);
   const plAdjustTotal=books.reduce((a,bk)=>a+(bk.plAdjust||0),0);
-  const totalPL=betsTotalPL+(timeFilter==="All Time"?plAdjustTotal:0);
+  const plManualTotal=books.reduce((a,bk)=>a+(bk.plManual||0),0);
+  const totalPL=betsTotalPL+plManualTotal+(timeFilter==="All Time"?plAdjustTotal:0);
   const totalCost=settled.reduce((acc,b)=>acc+betCost(b),0);
   const roi=totalCost>0?(betsTotalPL/totalCost)*100:0;
   const decisive=settled.filter(b=>b.outcome!=="Push");
@@ -267,7 +270,7 @@ export default function App(){
     const bb=settled.filter(b=>b.bookmaker===bk.name);
     const betsPl=bb.reduce((acc,b)=>acc+betPL(b),0);
     const cost=bb.reduce((acc,b)=>acc+betCost(b),0);
-    const pl=betsPl+(timeFilter==="All Time"?(bk.plAdjust||0):0);
+    const pl=betsPl+(bk.plManual||0)+(timeFilter==="All Time"?(bk.plAdjust||0):0);
     return{...bk,pl,roi:cost>0?(betsPl/cost)*100:0,count:bb.length};
   });
 
@@ -470,6 +473,20 @@ export default function App(){
     });
     persistBooks(next);setBalEdit(null);setBalEditVal("");
     showToast(msgDelta!==0?`Balance updated · P&L ${msgDelta>=0?"+":""}$${msgDelta.toFixed(2)}`:"Balance updated");
+  }
+  function savePLEdit(name){
+    const nv=parseFloat(plEditVal);
+    if(isNaN(nv)){setPlEdit(null);setPlEditVal("");return;}
+    const betsPl=settledAll.filter(b=>b.bookmaker===name).reduce((a,b)=>a+betPL(b),0);
+    const next=books.map(b=>{
+      if(b.name!==name) return b;
+      // plManual is the manual P&L correction; it counts in all time filters and never touches the balance.
+      // Set the bookie's all-time P&L (bets + plAdjust + plManual) to the typed target.
+      const newManual=parseFloat((nv-betsPl-(b.plAdjust||0)).toFixed(2));
+      return{...b,plManual:newManual};
+    });
+    persistBooks(next);setPlEdit(null);setPlEditVal("");
+    showToast(`P&L set to $${nv.toFixed(2)}`);
   }
   function addTxn(){
     if(!txnForm.amount||parseFloat(txnForm.amount)<=0){showToast("Enter an amount");return;}
@@ -857,8 +874,9 @@ export default function App(){
             <div style={{fontSize:16,fontWeight:700,marginBottom:16}}>Accounts & Transactions</div>
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px 18px",marginBottom:16}}>
               <div style={{color:C.muted,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>Bookmakers</div>
-              {books.map(bk=>(
-                <div key={bk.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:`1px solid ${C.border}`,gap:8,flexWrap:"wrap"}}>
+              {books.map(bk=>{const bkPL=settledAll.filter(b=>b.bookmaker===bk.name).reduce((a,b)=>a+betPL(b),0)+(bk.plManual||0)+(bk.plAdjust||0);return(
+                <div key={bk.name} style={{padding:"9px 0",borderTop:`1px solid ${C.border}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{width:10,height:10,borderRadius:"50%",background:bk.color,display:"inline-block"}}/>
                     <span style={{fontWeight:600,fontSize:14}}>{bk.name}</span>
@@ -877,7 +895,23 @@ export default function App(){
                     </div>
                   )}
                 </div>
-              ))}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:6,paddingLeft:18}}>
+                  <span style={{color:C.muted,fontSize:11}}>P&L (all time)</span>
+                  {plEdit===bk.name?(
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <input value={plEditVal} onChange={e=>setPlEditVal(e.target.value)} type="number" inputMode="decimal" style={{...iStyle,width:100,padding:"6px 10px",fontSize:13}} autoFocus/>
+                      <button onClick={()=>savePLEdit(bk.name)} style={sBtn(C.win)}>Save</button>
+                      <button onClick={()=>setPlEdit(null)} style={{background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,padding:"7px 10px",fontSize:11,cursor:"pointer"}}>✕</button>
+                    </div>
+                  ):(
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span style={{fontFamily:"monospace",fontWeight:700,fontSize:14,color:bkPL>=0?C.win:C.loss}}>{fmt(bkPL)}</span>
+                      <button onClick={()=>{setPlEdit(bk.name);setPlEditVal(bkPL.toFixed(2));}} style={{background:"transparent",color:C.accent,border:`1px solid ${C.accent}44`,borderRadius:5,padding:"4px 9px",fontSize:10,cursor:"pointer"}}>Edit</button>
+                    </div>
+                  )}
+                </div>
+                </div>
+              );})}
               <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap",alignItems:"flex-end"}}>
                 <div style={{flex:1,minWidth:130}}>
                   <div style={{color:C.muted,fontSize:11,marginBottom:4}}>New bookie name</div>
