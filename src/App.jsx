@@ -44,6 +44,10 @@ function balanceEffect(b,outcome){
   if(outcome==="Cashed Out"){ const c=parseFloat(b.collectAmount||0); if(b.isBonus) return c; return b.deducted?c:c-stake; }
   return 0;
 }
+// Net lifetime effect of a bet on its bookie balance: upfront stake deduction + settled outcome.
+function betBalEffect(x){
+  return (x.deducted&&!x.isBonus? -parseFloat(x.stake||0):0) + (x.outcome!=="Pending"? balanceEffect(x,x.outcome):0);
+}
 
 function inTimeFilter(dateStr,filter){
   if(filter==="All Time"||!dateStr) return true;
@@ -391,9 +395,11 @@ export default function App(){
     if(!form.match||!form.stake||!form.odds){showToast("Match, stake, and odds are required");return;}
     const creditId=form._creditId;
     const wasEdit=!!editId;
-    const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(bets.find(b=>b.id===editId)?.deducted??false):(!form.isBonus)};
+    const prevBet=wasEdit?bets.find(b=>b.id===editId):null;
+    const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(prevBet?.deducted??false):(!form.isBonus)};
     delete bet._creditId;
-    if(!wasEdit&&bet.outcome!=="Pending") bet.settledDate=todayLocal();
+    if(bet.outcome==="Pending") delete bet.settledDate;
+    else if(!bet.settledDate) bet.settledDate=todayLocal();
     const next=editId?bets.map(b=>b.id===editId?bet:b):[...bets,bet];
     if(editId) setEditId(null);
     persistBets(next);
@@ -402,14 +408,16 @@ export default function App(){
       persistCredits(nc);
     }
     if(!wasEdit){
-      let delta=0;
-      if(!bet.isBonus) delta-=bet.stake;
-      if(bet.outcome!=="Pending") delta+=balanceEffect(bet,bet.outcome);
+      const delta=betBalEffect(bet);
       if(delta!==0){
         const newBal=adjustBalance(bet.bookmaker,delta);
         showToast(`${bet.bookmaker} ${delta>=0?"+":""}$${delta.toFixed(2)} → $${newBal.toFixed(2)}`);
       } else { showToast("Bet logged"); }
-    } else { showToast("Bet updated"); }
+    } else {
+      if(prevBet){const oe=betBalEffect(prevBet); if(oe!==0) adjustBalance(prevBet.bookmaker,-oe);}
+      const ne=betBalEffect(bet); if(ne!==0) adjustBalance(bet.bookmaker,ne);
+      showToast("Bet updated");
+    }
     setForm(emptyForm); setTab("log");
   }
 
@@ -421,9 +429,7 @@ export default function App(){
     const b=bets.find(x=>x.id===id);
     persistBets(bets.filter(x=>x.id!==id));
     if(b){
-      let effect=0;
-      if(b.deducted&&!b.isBonus) effect-=parseFloat(b.stake||0);
-      if(b.outcome!=="Pending") effect+=balanceEffect(b,b.outcome);
+      const effect=betBalEffect(b);
       if(effect!==0){
         const newBal=adjustBalance(b.bookmaker,-effect);
         showToast(`Bet deleted · ${b.bookmaker} ${-effect>=0?"+":""}$${(-effect).toFixed(2)} → $${newBal.toFixed(2)}`);
