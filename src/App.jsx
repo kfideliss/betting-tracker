@@ -27,9 +27,10 @@ function fmt(n){ return n>=0?`+$${n.toFixed(2)}`:`-$${Math.abs(n).toFixed(2)}`; 
 function fmtAbs(n){ return `$${Math.abs(n).toFixed(2)}`; }
 function evColor(ev){ return ev===null?C.muted:ev>=0?C.win:C.loss; }
 
+function hasReturn(b){ return b.returnAmount!=null&&b.returnAmount!==""; }
 function betPL(b){
   const stake=parseFloat(b.stake),odds=parseFloat(b.odds||0),cost=b.isBonus?0:stake;
-  if(b.outcome==="Win") return stake*(odds-1);
+  if(b.outcome==="Win") return (!b.isBonus&&hasReturn(b))?parseFloat(b.returnAmount)-cost:stake*(odds-1);
   if(b.outcome==="Loss"||b.outcome==="Bonus Refund") return -cost;
   if(b.outcome==="Cashed Out") return parseFloat(b.collectAmount||0)-cost;
   return 0;
@@ -38,7 +39,7 @@ function betCost(b){ return b.isBonus?0:parseFloat(b.stake||0); }
 
 function balanceEffect(b,outcome){
   const stake=parseFloat(b.stake),odds=parseFloat(b.odds||0);
-  if(outcome==="Win"){ if(b.isBonus) return stake*(odds-1); return b.deducted?stake*odds:stake*(odds-1); }
+  if(outcome==="Win"){ if(b.isBonus) return stake*(odds-1); const full=hasReturn(b)?parseFloat(b.returnAmount):stake*odds; return b.deducted?full:full-stake; }
   if(outcome==="Loss"||outcome==="Bonus Refund"){ if(b.isBonus) return 0; return b.deducted?0:-stake; }
   if(outcome==="Push"){ if(b.isBonus) return 0; return b.deducted?stake:0; }
   if(outcome==="Cashed Out"){ const c=parseFloat(b.collectAmount||0); if(b.isBonus) return c; return b.deducted?c:c-stake; }
@@ -85,7 +86,7 @@ export default function App(){
   const [chartFilter,setChartFilter]=useState("All Time");
   const [aiSummary,setAiSummary]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
-  const emptyForm={date:todayLocal(),sport:"AFL",market:"Head-to-Head",bookmaker:"TAB",match:"",stake:"",odds:"",myProb:"",outcome:"Pending",notes:"",betType:"Regular",isBonus:false};
+  const emptyForm={date:todayLocal(),sport:"AFL",market:"Head-to-Head",bookmaker:"TAB",match:"",stake:"",odds:"",toReturn:"",myProb:"",outcome:"Pending",notes:"",betType:"Regular",isBonus:false};
   const [form,setForm]=useState(emptyForm);
   const [quickMode,setQuickMode]=useState(true);
   const [editId,setEditId]=useState(null);
@@ -104,6 +105,8 @@ export default function App(){
   const [refundAmt,setRefundAmt]=useState("");
   const [cashoutFor,setCashoutFor]=useState(null);
   const [cashoutAmt,setCashoutAmt]=useState("");
+  const [winFor,setWinFor]=useState(null);
+  const [winAmt,setWinAmt]=useState("");
   const [newBookName,setNewBookName]=useState("");
   const [newBookBal,setNewBookBal]=useState("");
   const [txnForm,setTxnForm]=useState({book:"TAB",type:"deposit",amount:"",date:todayLocal(),notes:""});
@@ -159,6 +162,7 @@ export default function App(){
     const current=freshBets.find(b=>b.id===bet.id);
     if(!current) return;
     const updated={...current,outcome,settledDate:todayLocal()};
+    if(outcome==="Win"){ if(extra!=null&&extra!=="") updated.returnAmount=extra; /* else keep return captured at placement */ } else delete updated.returnAmount;
     if(outcome==="Bonus Refund") updated.refundAmount=extra;
     if(outcome==="Cashed Out") updated.collectAmount=extra;
     if(outcome==="Pending") delete updated.settledDate;
@@ -175,7 +179,7 @@ export default function App(){
       const newBal=adjustBalance(current.bookmaker,delta);
       showToast(`${current.bookmaker} ${delta>=0?"+":""}$${delta.toFixed(2)} → $${newBal.toFixed(2)}${creditMsg}`);
     } else { showToast(`Marked as ${outcome}${creditMsg}`); }
-    setRefundFor(null);setRefundAmt("");setCashoutFor(null);setCashoutAmt("");setResettleId(null);
+    setRefundFor(null);setRefundAmt("");setCashoutFor(null);setCashoutAmt("");setWinFor(null);setWinAmt("");setResettleId(null);
   }
 
   // Data export/import for carry-over
@@ -410,6 +414,8 @@ export default function App(){
     const prevBet=wasEdit?bets.find(b=>b.id===editId):null;
     const bet={...form,id:editId||Date.now().toString(),stake:parseFloat(form.stake),odds:parseFloat(form.odds),myProb:form.myProb?parseFloat(form.myProb):null,deducted:editId?(prevBet?.deducted??false):(!form.isBonus)};
     delete bet._creditId;
+    delete bet.toReturn;
+    if(!form.isBonus&&form.toReturn!==""&&form.toReturn!=null) bet.returnAmount=parseFloat(form.toReturn); else delete bet.returnAmount;
     if(bet.outcome==="Pending") delete bet.settledDate;
     else if(!bet.settledDate) bet.settledDate=todayLocal();
     const next=editId?bets.map(b=>b.id===editId?bet:b):[...bets,bet];
@@ -434,7 +440,7 @@ export default function App(){
   }
 
   function editBet(b){
-    setForm({...b,stake:b.stake.toString(),odds:b.odds?b.odds.toString():"",myProb:b.myProb?b.myProb.toString():"",notes:b.notes||"",betType:b.betType||"Regular",isBonus:!!b.isBonus});
+    setForm({...b,stake:b.stake.toString(),odds:b.odds?b.odds.toString():"",toReturn:b.returnAmount!=null?b.returnAmount.toString():"",myProb:b.myProb?b.myProb.toString():"",notes:b.notes||"",betType:b.betType||"Regular",isBonus:!!b.isBonus});
     setEditId(b.id);setQuickMode(false);setTab("add");
   }
   function deleteBet(id){
@@ -553,9 +559,18 @@ export default function App(){
         <button onClick={()=>{setCashoutFor(null);setCashoutAmt("");}} style={{background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,padding:"7px 10px",fontSize:11,cursor:"pointer"}}>✕</button>
       </div>
     );
+    if(winFor===b.id) return(
+      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{color:C.win,fontSize:11}}>Returned $</span>
+        <input type="number" inputMode="decimal" value={winAmt} onChange={e=>setWinAmt(e.target.value)} style={{...iStyle,width:90,padding:"6px 10px",fontSize:12}} autoFocus/>
+        <button onClick={()=>settleBet(b,"Win",winAmt===""?null:parseFloat(winAmt))} style={sBtn(C.win)}>Confirm</button>
+        <button onClick={()=>{setWinFor(null);setWinAmt("");}} style={{background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,padding:"7px 10px",fontSize:11,cursor:"pointer"}}>✕</button>
+      </div>
+    );
     return(
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         <button onClick={()=>settleBet(b,"Win")} style={sBtn(C.win)}>Won</button>
+        <button onClick={()=>{setWinFor(b.id);setWinAmt((parseFloat(b.stake)*parseFloat(b.odds||1)).toFixed(2));}} style={sBtn(C.win)}>Won $</button>
         <button onClick={()=>settleBet(b,"Loss")} style={sBtn(C.loss)}>Lost</button>
         <button onClick={()=>settleBet(b,"Push")} style={sBtn(C.push)}>Push</button>
         <button onClick={()=>{setCashoutFor(b.id);setCashoutAmt("");}} style={sBtn(C.cashout)}>Cash Out</button>
@@ -591,8 +606,9 @@ export default function App(){
   if(!loaded) return <div style={{background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontFamily:"system-ui"}}>Loading...</div>;
 
   const liveEV=form.myProb&&form.odds?(parseFloat(form.myProb)/100)*parseFloat(form.odds)-1:null;
-  const potProfit=form.stake&&form.odds?parseFloat(form.stake)*(parseFloat(form.odds)-1):null;
-  const potReturn=form.stake&&form.odds?(form.isBonus?parseFloat(form.stake)*(parseFloat(form.odds)-1):parseFloat(form.stake)*parseFloat(form.odds)):null;
+  const hasToReturn=!form.isBonus&&form.toReturn!==""&&form.toReturn!=null;
+  const potReturn=hasToReturn?parseFloat(form.toReturn):(form.stake&&form.odds?(form.isBonus?parseFloat(form.stake)*(parseFloat(form.odds)-1):parseFloat(form.stake)*parseFloat(form.odds)):null);
+  const potProfit=hasToReturn?(parseFloat(form.toReturn)-parseFloat(form.stake||0)):(form.stake&&form.odds?parseFloat(form.stake)*(parseFloat(form.odds)-1):null);
   const monthName=new Date(calMonth.y,calMonth.m).toLocaleString("en-AU",{month:"long",year:"numeric"});
 
   return(
@@ -1030,6 +1046,11 @@ export default function App(){
                 <div style={{color:C.muted,fontSize:11,marginBottom:5}}>Odds (Decimal)</div>
                 <input type="number" inputMode="decimal" value={form.odds} onChange={e=>hfc("odds",e.target.value)} min="1" step="0.01" placeholder="e.g. 1.91" style={iStyle}/>
               </div>
+              {!form.isBonus&&<div>
+                <div style={{color:C.muted,fontSize:11,marginBottom:5}}>To Return ($) — optional</div>
+                <input type="number" inputMode="decimal" value={form.toReturn} onChange={e=>hfc("toReturn",e.target.value)} min="0" step="0.01" placeholder="exact betslip return" style={iStyle}/>
+                <div style={{color:C.muted,fontSize:10,marginTop:4}}>From the betslip — makes wins exact</div>
+              </div>}
               <div>
                 <div style={{color:C.muted,fontSize:11,marginBottom:5}}>Bookmaker</div>
                 <select value={form.bookmaker} onChange={e=>hfc("bookmaker",e.target.value)} style={iStyle}>{bookNames.map(o=><option key={o} value={o}>{o}</option>)}</select>
@@ -1109,6 +1130,7 @@ export default function App(){
                         {b.outcome==="Pending"&&b.odds&&<div style={{color:C.win,fontSize:10,fontFamily:"monospace"}}>→ ${(b.isBonus?parseFloat(b.stake)*(parseFloat(b.odds)-1):parseFloat(b.stake)*parseFloat(b.odds)).toFixed(2)} if win</div>}
                         {ev!==null&&<div style={{color:evColor(ev),fontSize:10}}>EV {(ev*100).toFixed(1)}%</div>}
                         {pl!==null&&<div style={{color:pl>=0?C.win:C.loss,fontSize:12,fontWeight:700,fontFamily:"monospace"}}>{fmt(pl)}</div>}
+                        {b.outcome==="Win"&&hasReturn(b)&&<div style={{color:C.win,fontSize:10}}>returned ${parseFloat(b.returnAmount).toFixed(2)}</div>}
                         {b.outcome==="Cashed Out"&&b.collectAmount!==undefined&&<div style={{color:C.cashout,fontSize:10}}>collected ${parseFloat(b.collectAmount).toFixed(2)}</div>}
                         {b.outcome==="Bonus Refund"&&b.refundAmount&&<div style={{color:C.bonus,fontSize:10}}>+${parseFloat(b.refundAmount).toFixed(2)} BB credit</div>}
                         <div style={{color:C.muted,fontSize:10,marginTop:2}}>{b.date}</div>
