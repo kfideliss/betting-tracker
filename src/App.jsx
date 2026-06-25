@@ -364,7 +364,7 @@ export default function App(){
   const calData=(()=>{
     const map={};
     settledAll.forEach(b=>{
-      const d=settleDate(b); if(!d) return;
+      const d=b.date; if(!d) return;            // calendar groups by event/placement date, not settle date
       if(!map[d]) map[d]={pl:0,bets:[]};
       map[d].pl+=betPL(b); map[d].bets.push(b);
     });
