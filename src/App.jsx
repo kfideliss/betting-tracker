@@ -112,6 +112,7 @@ export default function App(){
   const [txnForm,setTxnForm]=useState({book:"TAB",type:"deposit",amount:"",date:todayLocal(),notes:""});
   const [balEdit,setBalEdit]=useState(null);
   const [balEditVal,setBalEditVal]=useState("");
+  const [resetConfirm,setResetConfirm]=useState(false);
   const [plEdit,setPlEdit]=useState(null);
   const [plEditVal,setPlEditVal]=useState("");
   const [calMonth,setCalMonth]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
@@ -192,6 +193,17 @@ export default function App(){
     URL.revokeObjectURL(url);
     showToast("Backup downloaded");
   }
+  function resetAllData(){
+    lsSet("bets_v1",[]); setBets([]);
+    lsSet("books_v1",DEFAULT_BOOKS); setBooks(DEFAULT_BOOKS);
+    lsSet("txns_v1",[]); setTxns([]);
+    lsSet("credits_v1",[]); setCredits([]);
+    lsSet("sports_v1",SPORTS); setCustomSports(SPORTS);
+    lsSet("markets_v1",MARKETS); setCustomMarkets(MARKETS);
+    setResetConfirm(false);
+    setTab("dashboard");
+    showToast("All data reset — starting fresh");
+  }
   function handleDataImport(e){
     const file=e.target.files[0];
     if(!file) return;
@@ -202,7 +214,9 @@ export default function App(){
         setBets(lsGet("bets_v1",[]));
         const sb=lsGet("books_v1",null); if(sb) setBooks(sb);
         setTxns(lsGet("txns_v1",[]));
-        setImported(lsGet("imported_v1",false));
+        setCredits(lsGet("credits_v1",[]));
+        const ss=lsGet("sports_v1",null); if(ss) setCustomSports(ss);
+        const ms=lsGet("markets_v1",null); if(ms) setCustomMarkets(ms);
         showToast("Data imported successfully");
       } catch { showToast("Import failed — invalid file"); }
     };
@@ -1019,7 +1033,27 @@ export default function App(){
                   <input type="file" accept=".json" onChange={handleDataImport} style={{display:"none"}}/>
                 </label>
               </div>
-              <div style={{color:C.muted,fontSize:11,marginTop:8}}>Download a backup before switching devices. Restore imports all bets, balances, and transactions.</div>
+              <div style={{color:C.muted,fontSize:11,marginTop:8}}>Download a backup before switching devices. Restore imports all bets, balances, transactions, bonus credits, and custom sports/markets.</div>
+            </div>
+
+            <div style={{background:C.card,border:`1px solid ${C.loss}55`,borderRadius:10,padding:"16px 18px",marginTop:16}}>
+              <div style={{color:C.loss,fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Danger Zone</div>
+              {!resetConfirm?(
+                <>
+                  <div style={{color:C.muted,fontSize:12,marginBottom:12}}>Wipe everything and start from scratch: all bets, transactions, bonus credits, custom sports/markets, and bookmaker balances (reset to defaults). This cannot be undone.</div>
+                  <button onClick={()=>setResetConfirm(true)} style={{background:"transparent",color:C.loss,border:`1px solid ${C.loss}`,borderRadius:7,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Reset All Data</button>
+                </>
+              ):(
+                <div style={{border:`1px solid ${C.loss}55`,borderRadius:8,padding:"14px",background:C.loss+"11"}}>
+                  <div style={{color:C.text,fontSize:13,fontWeight:700,marginBottom:6}}>Are you sure?</div>
+                  <div style={{color:C.muted,fontSize:12,marginBottom:12}}>This permanently deletes all your data and resets bookmakers to defaults. Download a backup first if you might want it back.</div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <button onClick={handleDataExport} style={{background:C.accent,color:"#fff",border:"none",borderRadius:7,padding:"10px 16px",fontSize:13,fontWeight:600,cursor:"pointer"}}>Export backup first</button>
+                    <button onClick={resetAllData} style={{background:C.loss,color:"#fff",border:"none",borderRadius:7,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Yes, wipe everything</button>
+                    <button onClick={()=>setResetConfirm(false)} style={{background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:7,padding:"10px 16px",fontSize:13,cursor:"pointer"}}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -18,7 +18,7 @@ export function lsRemove(key) {
 
 // Export all data as JSON string
 export function exportAllData() {
-  const keys = ["bets_v1", "books_v1", "txns_v1", "imported_v1"];
+  const keys = ["bets_v1", "books_v1", "txns_v1", "credits_v1", "sports_v1", "markets_v1", "imported_v1"];
   const data = {};
   keys.forEach(k => { const v = localStorage.getItem(PREFIX + k); if (v) data[k] = JSON.parse(v); });
   return JSON.stringify(data, null, 2);
